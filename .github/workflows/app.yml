@@ -140,8 +140,13 @@ jobs:
           if-no-files-found: ignore
 
       - name: Self-update from the newest published release
+        env:
+          # The shared runner IP exhausts GitHub's anonymous API limit; the app
+          # reads MADMOLE_GITHUB_TOKEN only for this test.
+          GH_TOKEN: ${{ github.token }}
+          MADMOLE_GITHUB_TOKEN: ${{ github.token }}
         run: |
-          latest=$(curl -fsS "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases?per_page=30" |
+          latest=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=30" |
             python3 -c "import sys,json; b=[int(r['tag_name'][8:]) for r in json.load(sys.stdin) if r['tag_name'].startswith('madmole-') and not r['draft']]; print(max(b) if b else '')")
           if [[ -z "$latest" ]]; then
             echo "No madmole-* release yet; nothing to update from."

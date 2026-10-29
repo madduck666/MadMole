@@ -23,6 +23,8 @@ enum UpdateError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        case .server(403), .server(429):
+            return "GitHub kısa süre içinde çok fazla sorgu aldı (HTTP 403). Birkaç dakika sonra tekrar deneyin."
         case let .server(status):
             return "GitHub yanıt vermedi (HTTP \(status)). İnternet bağlantınızı kontrol edip tekrar deneyin."
         case .missingAsset:
@@ -78,6 +80,10 @@ enum UpdateClient {
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("MadMole-Updater", forHTTPHeaderField: "User-Agent")
+        // CI only: an anonymous runner IP hits GitHub's rate limit quickly.
+        if let token = ProcessInfo.processInfo.environment["MADMOLE_GITHUB_TOKEN"], !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 200 else { throw UpdateError.server(status) }
