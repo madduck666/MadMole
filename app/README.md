@@ -7,6 +7,17 @@ Silme işlemlerinin tamamı motorun kendi güvenlik kurallarından (korunan yoll
 `mole_delete` hunisi, kuru çalıştırma önizlemesi, işlem kayıtları) geçer;
 arayüz bu kuralları yeniden yazmaz.
 
+<p align="center">
+  <img src="screenshots/1-dashboard.png" width="49%" alt="Genel Bakış">
+  <img src="screenshots/2-clean.png" width="49%" alt="Akıllı Temizlik">
+  <img src="screenshots/3-uninstall.png" width="49%" alt="Uygulama Kaldırıcı">
+  <img src="screenshots/4-analyze.png" width="49%" alt="Disk Analizi">
+</p>
+
+Ekran görüntüleri CI'da gerçek bir macOS sanal makinesinde alınır; Actions
+sekmesinden **App** iş akışını `publish_screenshots` seçeneğiyle elle
+çalıştırarak `app/screenshots/` klasörünü yenileyebilirsiniz.
+
 ## Ekranlar
 
 | Ekran | Ne yapar | Motor komutu |
@@ -20,7 +31,7 @@ arayüz bu kuralları yeniden yazmaz.
 | Kurulum Dosyaları | `.dmg`, `.pkg`, `.iso`, `.xip`, `.zip` | `mo installer` |
 | Uygulama İnceltme | Evrensel uygulamalardan Intel kodunu çıkarır | `mo slim` |
 | Geçmiş | Yapılan her işlem ve silinen her öğe | `mo history --json` |
-| Ayarlar | Tam Disk Erişimi, korunan yollar, Touch ID | `mo clean --whitelist`, `mo touchid` |
+| Ayarlar | Görünüm (Sistem/Açık/Koyu), Tam Disk Erişimi, korunan yollar, Touch ID | `mo clean --whitelist`, `mo touchid` |
 
 Gerçek değişiklik yapan her işlem (temizlik, kaldırma, optimizasyon…) uygulama
 içinde açılan bir **terminal penceresinde** çalışır. Böylece motorun kendi onay

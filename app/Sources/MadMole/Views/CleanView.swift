@@ -171,8 +171,9 @@ struct CleanView: View {
                 HStack(spacing: 12) {
                     IconTile(symbol: style.symbol, tint: style.tint, size: 32)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(section.name)
+                        Text(CleanSectionStyle.title(for: section.name))
                             .font(.system(size: 14, weight: .semibold))
+                            .help(section.name)
                         CapsuleBar(fraction: Double(section.countedBytes) / Double(max(maxBytes, 1)), tint: style.tint, height: 5)
                             .frame(maxWidth: 260)
                     }
@@ -277,6 +278,29 @@ private struct CleanItemRow: View {
 struct CleanSectionStyle {
     let symbol: String
     let tint: Color
+
+    /// Turkish titles for the engine's section names; unknown names pass through.
+    static func title(for name: String) -> String {
+        let titles: [String: String] = [
+            "System": "Sistem",
+            "User essentials": "Kullanıcı önbellekleri ve loglar",
+            "App caches": "Uygulama önbellekleri",
+            "App leftovers": "Kaldırılmış uygulama artıkları",
+            "Apple Silicon updates": "Apple Silicon güncellemeleri",
+            "Application Support": "Uygulama destek dosyaları",
+            "Apps & utilities": "Uygulamalar ve araçlar",
+            "Browsers": "Tarayıcılar",
+            "Cloud & Office": "Bulut ve Office",
+            "Developer tools": "Geliştirici araçları",
+            "Device backups & firmware": "Aygıt yedekleri ve yazılımları",
+            "External volume": "Harici disk",
+            "Large files": "Büyük dosyalar",
+            "Project artifacts": "Proje artıkları",
+            "Time Machine": "Time Machine",
+            "Virtualization": "Sanallaştırma",
+        ]
+        return titles[name] ?? name
+    }
 
     static func style(for name: String) -> CleanSectionStyle {
         let n = name.lowercased()

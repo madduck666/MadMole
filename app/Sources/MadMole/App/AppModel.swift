@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import SwiftUI
@@ -106,6 +107,31 @@ struct TerminalJob: Identifiable {
     }
 }
 
+enum AppearanceMode: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    static let storageKey = "appearance"
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system: return "Sistem"
+        case .light: return "Açık"
+        case .dark: return "Koyu"
+        }
+    }
+
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
 struct ConsoleLine: Identifiable {
     let id = UUID()
     let date: Date
@@ -125,7 +151,7 @@ final class ConsoleLog {
 
     func append(_ text: String, source: String) {
         let clean = TextUtils.stripANSI(text)
-        guard !clean.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        guard !clean.trimmingCharacters(in: .whitespaces).isEmpty, !TextUtils.isDecoration(clean) else { return }
         lines.append(ConsoleLine(date: Date(), source: source, text: clean))
         if lines.count > limit {
             lines.removeFirst(lines.count - limit)
@@ -181,6 +207,9 @@ final class AppModel {
     /// `MADMOLE_AUTORUN=1` starts its read-only scan; CI uses both to take
     /// screenshots of every page.
     private func applyLaunchOptions(_ environment: [String: String]) {
+        if let appearance = environment["MADMOLE_APPEARANCE"], AppearanceMode(rawValue: appearance) != nil {
+            UserDefaults.standard.set(appearance, forKey: AppearanceMode.storageKey)
+        }
         guard let raw = environment["MADMOLE_START_PAGE"], let start = Page(rawValue: raw) else { return }
         page = start
         if environment["MADMOLE_CONSOLE"] == "1" { console.isVisible = true }

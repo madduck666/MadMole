@@ -95,11 +95,14 @@ jobs:
           shoot 6-purge purge 30
           shoot 7-history history 15
           shoot 8-settings settings 10
-          defaults write -g AppleInterfaceStyle Dark
+          defaults delete com.madduck666.madmole appearance 2> /dev/null || true
+          export MADMOLE_APPEARANCE=dark
           shoot 9-dashboard-dark dashboard 15
           shoot 10-clean-dark clean 120
-          defaults delete -g AppleInterfaceStyle || true
-          for png in screenshots/*.png; do sips -Z 1600 "$png" > /dev/null || true; done
+          shoot 11-analyze-dark analyze 60
+          unset MADMOLE_APPEARANCE
+          defaults delete com.madduck666.madmole appearance 2> /dev/null || true
+          for png in screenshots/*.png; do sips -Z 1280 "$png" > /dev/null || true; done
           ls -l screenshots
 
       - name: Upload screenshots

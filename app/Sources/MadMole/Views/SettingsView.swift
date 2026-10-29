@@ -6,11 +6,27 @@ struct SettingsView: View {
     @State private var hasFullDiskAccess = Permissions.hasFullDiskAccess
     @State private var touchIDStatus: String?
     @State private var loadingTouchID = false
+    @AppStorage(AppearanceMode.storageKey) private var appearance = AppearanceMode.system.rawValue
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 PageHeader(page: .settings)
+
+                Card(title: "Görünüm", symbol: "circle.lefthalf.filled", tint: Theme.indigo) {
+                    HStack {
+                        Text("Tema")
+                        Spacer()
+                        Picker("Tema", selection: $appearance) {
+                            ForEach(AppearanceMode.allCases) { mode in
+                                Text(mode.title).tag(mode.rawValue)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .frame(width: 240)
+                    }
+                }
 
                 Card(title: "İzinler", symbol: "lock.shield.fill", tint: Theme.orange) {
                     HStack {

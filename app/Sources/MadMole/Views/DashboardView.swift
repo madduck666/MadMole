@@ -143,7 +143,7 @@ private struct HealthCard: View {
         let score = snapshot.healthScore ?? 0
         let tint = Theme.health(score)
         Card(title: "Sistem Sağlığı", symbol: "heart.text.square.fill", tint: tint) {
-            HStack(spacing: 20) {
+            HStack(alignment: .center, spacing: 20) {
                 RingGauge(fraction: Double(score) / 100, tint: tint, lineWidth: 12) {
                     VStack(spacing: 0) {
                         Text("\(score)")
@@ -164,20 +164,23 @@ private struct HealthCard: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    HStack(spacing: 8) {
-                        Button {
-                            model.page = .clean
-                        } label: {
-                            Label("Temizle", systemImage: Page.clean.symbol)
-                        }
-                        .buttonStyle(GradientButtonStyle(tint: Page.clean.tint))
-                        Button {
-                            model.page = .optimize
-                        } label: {
-                            Label("Optimize Et", systemImage: Page.optimize.symbol)
-                        }
-                    }
                 }
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 10) {
+                Button {
+                    model.page = .clean
+                } label: {
+                    Label("Temizle", systemImage: Page.clean.symbol)
+                }
+                .buttonStyle(GradientButtonStyle(tint: Page.clean.tint))
+                Button {
+                    model.page = .optimize
+                } label: {
+                    Label("Optimize Et", systemImage: Page.optimize.symbol)
+                }
+                .controlSize(.large)
+                Spacer(minLength: 0)
             }
         }
     }

@@ -137,6 +137,7 @@ final class ToolStore {
 
     private func append(_ line: String) {
         let text = TextUtils.stripANSI(line)
+        if TextUtils.isDecoration(text) { return }
         if text.trimmingCharacters(in: .whitespaces).isEmpty {
             // Keep at most one blank line in a row.
             if let last = output.last, last.isEmpty { return }

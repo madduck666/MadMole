@@ -124,7 +124,7 @@ private struct SessionRow: View {
                 }
             }
             VStack(alignment: .trailing, spacing: 2) {
-                Text(session.size?.isEmpty == false ? session.size! : "—")
+                Text(TextUtils.displaySize(session.size))
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                 if let items = session.items {

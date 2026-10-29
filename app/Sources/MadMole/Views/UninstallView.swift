@@ -211,7 +211,7 @@ private struct AppRow: View {
             Spacer()
             CapsuleBar(fraction: fraction, tint: Page.uninstall.tint.opacity(0.8), height: 5)
                 .frame(width: 110)
-            Text(app.size)
+            Text(app.sizeBytes > 0 ? TextUtils.formatBytes(app.sizeBytes) : app.size)
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .frame(width: 80, alignment: .trailing)

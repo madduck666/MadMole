@@ -1,7 +1,9 @@
+import AppKit
 import SwiftUI
 
 struct ContentView: View {
     @Environment(AppModel.self) private var model
+    @AppStorage(AppearanceMode.storageKey) private var appearance = AppearanceMode.system.rawValue
 
     var body: some View {
         @Bindable var model = model
@@ -37,6 +39,9 @@ struct ContentView: View {
         }
         .sheet(item: $model.terminalJob) { job in
             TerminalSheet(job: job)
+        }
+        .onChange(of: appearance, initial: true) { _, value in
+            NSApp.appearance = (AppearanceMode(rawValue: value) ?? .system).nsAppearance
         }
     }
 

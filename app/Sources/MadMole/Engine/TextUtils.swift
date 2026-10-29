@@ -36,6 +36,7 @@ enum TextUtils {
     }
 
     static func formatBytes(_ bytes: Int64) -> String {
+        if bytes <= 0 { return "0 KB" }
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
         formatter.allowedUnits = [.useKB, .useMB, .useGB, .useTB]
@@ -55,6 +56,20 @@ enum TextUtils {
 
     static func percent(_ value: Double) -> String {
         String(format: "%.0f%%", value)
+    }
+
+    /// True for lines that only draw a rule, such as `=====` or `-----`.
+    static func isDecoration(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count >= 3 else { return false }
+        return trimmed.allSatisfy { "=-─━_*".contains($0) }
+    }
+
+    /// Re-formats an engine size string ("1.04GB") the way the app shows
+    /// sizes; empty or zero sizes become a dash.
+    static func displaySize(_ engineText: String?) -> String {
+        guard let text = engineText, let bytes = parseSize(text), bytes > 0 else { return "—" }
+        return formatBytes(bytes)
     }
 
     /// Shortens a path under the home directory to `~/...`.
