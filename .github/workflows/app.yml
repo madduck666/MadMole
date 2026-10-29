@@ -1,7 +1,8 @@
 name: App
 
-# Builds MadMole.app (the native Apple Silicon front end) and publishes a DMG
-# as a workflow artifact.
+# Builds MadMole.app (the native Apple Silicon front end). Every push also
+# publishes a GitHub release tagged madmole-<run number>, which the app's
+# "check for updates" reads and installs over itself.
 on:
   push:
     paths:
@@ -56,8 +57,12 @@ jobs:
       - name: Analyze trash mode tests
         run: go test ./cmd/analyze -run 'TrashMode|ParseArgs'
 
-      - name: Build app and DMG
-        run: ./scripts/build_app.sh --dmg
+      - name: Build app, DMG and update zip
+        env:
+          MADMOLE_VERSION: 1.0.${{ github.run_number }}
+          MADMOLE_BUILD: ${{ github.run_number }}
+          MADMOLE_UPDATE_REPO: ${{ github.repository }}
+        run: ./scripts/build_app.sh --dmg --zip
 
       - name: Smoke test the bundled engine
         run: |
@@ -72,6 +77,34 @@ jobs:
           "$ENGINE/mole" history --json --limit 5 > /tmp/history.json
           python3 -c "import json; json.load(open('/tmp/history.json')); print('history ok')"
           codesign --verify --strict --verbose=2 "$APP"
+
+      - name: Self-update from the newest published release
+        run: |
+          latest=$(curl -fsS "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases?per_page=30" |
+            python3 -c "import sys,json; b=[int(r['tag_name'][8:]) for r in json.load(sys.stdin) if r['tag_name'].startswith('madmole-') and not r['draft']]; print(max(b) if b else '')")
+          if [[ -z "$latest" ]]; then
+            echo "No madmole-* release yet; nothing to update from."
+            exit 0
+          fi
+          apps="$RUNNER_TEMP/Apps"
+          mkdir -p "$apps"
+          copy="$apps/MadMole.app"
+          ditto app/.build/MadMole.app "$copy"
+          # Pretend to be an old install: build 0, re-signed after the edit.
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 0" "$copy/Contents/Info.plist"
+          codesign --force --sign - --timestamp=none "$copy"
+          MADMOLE_UPDATE_SELFTEST=1 "$copy/Contents/MacOS/MadMole" > "$RUNNER_TEMP/selftest.log" 2>&1 &
+          for _ in $(seq 1 90); do
+            build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$copy/Contents/Info.plist" 2> /dev/null || echo "")
+            [[ "$build" == "$latest" ]] && break
+            sleep 2
+          done
+          pkill -x MadMole || true
+          cat "$RUNNER_TEMP/selftest.log" || true
+          echo "Installed build after update: ${build:-none} (expected $latest)"
+          [[ "$build" == "$latest" ]]
+          codesign --verify --deep --strict "$copy"
+          [[ ! -e "$apps/MadMole.previous.app" ]]
 
       - name: Screenshot every page
         continue-on-error: true
@@ -114,12 +147,60 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-      - name: Upload DMG
+      - name: Upload DMG and update zip
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: MadMole-dmg
-          path: dist/MadMole.dmg
+          name: MadMole-dist
+          path: |
+            dist/MadMole.dmg
+            dist/MadMole.zip
+            dist/MadMole.zip.sha256
           retention-days: 30
+
+  release:
+    name: Publish release
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: madmole-release
+      cancel-in-progress: false
+
+    steps:
+      - name: Download build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: MadMole-dist
+          path: dist
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          tag="madmole-${GITHUB_RUN_NUMBER}"
+          version="1.0.${GITHUB_RUN_NUMBER}"
+          printf '%s\n' "${COMMIT_MESSAGE:-MadMole $version}" > notes.md
+          # --latest=false keeps the repository's "latest release" on the CLI's V tags.
+          gh release create "$tag" dist/MadMole.zip dist/MadMole.zip.sha256 dist/MadMole.dmg \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "MadMole $version" \
+            --notes-file notes.md \
+            --latest=false
+
+      - name: Keep the ten newest app releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName,createdAt \
+            --jq '[.[] | select(.tagName | startswith("madmole-"))] | sort_by(.createdAt) | reverse | .[10:] | .[].tagName' |
+            while read -r old; do
+              gh release delete "$old" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+            done
 
   publish-screenshots:
     name: Publish screenshots

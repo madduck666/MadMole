@@ -13,6 +13,8 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 16) {
                 PageHeader(page: .settings)
 
+                UpdateSettingsCard()
+
                 Card(title: "Görünüm", symbol: "circle.lefthalf.filled", tint: Theme.indigo) {
                     HStack {
                         Text("Tema")
@@ -94,7 +96,7 @@ struct SettingsView: View {
                 }
 
                 Card(title: "Hakkında", symbol: "info.circle.fill", tint: Theme.indigo) {
-                    StatRow(title: "MadMole", value: Engine.appVersion)
+                    StatRow(title: "MadMole", value: "\(Engine.appVersion) (build \(UpdateClient.currentBuild))")
                     StatRow(title: "Mole motoru", value: Engine.version)
                     StatRow(title: "Motor konumu", value: TextUtils.abbreviatePath(Engine.rootURL.path))
                     StatRow(title: "Go araçları", value: Engine.hasGoBinaries ? "Hazır" : "Eksik (status/analyze çalışmaz)")

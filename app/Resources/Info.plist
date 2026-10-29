@@ -21,7 +21,9 @@
 	<key>CFBundleShortVersionString</key>
 	<string>__APP_VERSION__</string>
 	<key>CFBundleVersion</key>
-	<string>__APP_VERSION__</string>
+	<string>__BUILD_NUMBER__</string>
+	<key>MadMoleUpdateRepo</key>
+	<string>__UPDATE_REPO__</string>
 	<key>MadMoleEngineVersion</key>
 	<string>__ENGINE_VERSION__</string>
 	<key>LSApplicationCategoryType</key>

@@ -40,6 +40,13 @@ struct ContentView: View {
         .sheet(item: $model.terminalJob) { job in
             TerminalSheet(job: job)
         }
+        .sheet(isPresented: Binding(
+            get: { model.updates.showSheet },
+            set: { model.updates.showSheet = $0 }
+        )) {
+            UpdateSheet()
+        }
+        .task { model.updates.checkAtLaunch() }
         .onChange(of: appearance, initial: true) { _, value in
             NSApp.appearance = (AppearanceMode(rawValue: value) ?? .system).nsAppearance
         }
@@ -106,6 +113,7 @@ private struct Sidebar: View {
         }
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 0) {
+                UpdateBanner()
                 Divider()
                 Button {
                     model.page = .settings

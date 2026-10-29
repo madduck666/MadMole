@@ -2,10 +2,14 @@
 # Build MadMole.app, the native macOS (Apple Silicon) front end, with the Mole
 # engine bundled inside it.
 #
-# Usage: scripts/build_app.sh [--install] [--dmg] [--debug]
+# Usage: scripts/build_app.sh [--install] [--dmg] [--zip] [--debug]
 #   --install   Copy the finished app to /Applications (replaces an older copy)
 #   --dmg       Also create dist/MadMole.dmg
+#   --zip       Also create dist/MadMole.zip and its .sha256 (the update payload)
 #   --debug     Build the Swift app in debug configuration
+#
+# MADMOLE_VERSION, MADMOLE_BUILD and MADMOLE_UPDATE_REPO set the version, the
+# build number the in-app updater compares, and the GitHub repository it reads.
 #
 # Output: app/.build/MadMole.app (a hidden build folder, so repository checks
 # never lint the engine copy inside the bundle).
@@ -19,18 +23,22 @@ APP_NAME="MadMole"
 APP_BUNDLE="$OUT_DIR/$APP_NAME.app"
 DIST_DIR="$ROOT_DIR/dist"
 APP_VERSION="${MADMOLE_VERSION:-1.0.0}"
+BUILD_NUMBER="${MADMOLE_BUILD:-0}"
+UPDATE_REPO="${MADMOLE_UPDATE_REPO:-madduck666/MadMole}"
 BUNDLE_ID="${MADMOLE_BUNDLE_ID:-com.madduck666.madmole}"
 CONFIGURATION="release"
 INSTALL=false
 MAKE_DMG=false
+MAKE_ZIP=false
 
 for arg in "$@"; do
     case "$arg" in
         --install) INSTALL=true ;;
         --dmg) MAKE_DMG=true ;;
+        --zip) MAKE_ZIP=true ;;
         --debug) CONFIGURATION="debug" ;;
         -h | --help)
-            sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *)
@@ -51,6 +59,8 @@ command -v swift > /dev/null 2>&1 || fail "Swift is missing. Install Xcode or ru
 
 ENGINE_VERSION=$(sed -n 's/^VERSION="\([^"]*\)"$/\1/p' "$ROOT_DIR/mole")
 [[ -n "$ENGINE_VERSION" ]] || fail "Could not read VERSION from the mole router."
+[[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || fail "MADMOLE_BUILD must be a whole number, got: $BUILD_NUMBER"
+[[ "$UPDATE_REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "MADMOLE_UPDATE_REPO must look like owner/repo, got: $UPDATE_REPO"
 
 STAGE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/madmole-build.XXXXXX")
 cleanup() {
@@ -96,8 +106,10 @@ chmod 755 "$ENGINE_DIR/mole" "$ENGINE_DIR"/bin/*.sh "$ENGINE_DIR/bin/analyze-go"
 find "$ENGINE_DIR" -name '.DS_Store' -type f -delete # SAFE: Finder metadata inside the private staging copy
 
 sed -e "s/__APP_VERSION__/$APP_VERSION/g" \
+    -e "s/__BUILD_NUMBER__/$BUILD_NUMBER/g" \
     -e "s/__ENGINE_VERSION__/$ENGINE_VERSION/g" \
     -e "s/__BUNDLE_ID__/$BUNDLE_ID/g" \
+    -e "s|__UPDATE_REPO__|$UPDATE_REPO|g" \
     "$APP_DIR/Resources/Info.plist" > "$CONTENTS/Info.plist"
 printf 'APPL????' > "$CONTENTS/PkgInfo"
 
@@ -128,7 +140,15 @@ if [[ -d "$APP_BUNDLE" ]]; then
     rm -rf "$APP_BUNDLE" # SAFE: previous build output of this script inside app/.build
 fi
 ditto "$BUNDLE_STAGE" "$APP_BUNDLE"
-echo "Built $APP_BUNDLE (engine $ENGINE_VERSION)"
+echo "Built $APP_BUNDLE ($APP_VERSION, build $BUILD_NUMBER, engine $ENGINE_VERSION)"
+
+if [[ "$MAKE_ZIP" == "true" ]]; then
+    step "Creating dist/$APP_NAME.zip"
+    mkdir -p "$DIST_DIR"
+    ditto -c -k --keepParent "$APP_BUNDLE" "$DIST_DIR/$APP_NAME.zip"
+    (cd "$DIST_DIR" && shasum -a 256 "$APP_NAME.zip" > "$APP_NAME.zip.sha256")
+    echo "Created $DIST_DIR/$APP_NAME.zip ($(cut -d' ' -f1 < "$DIST_DIR/$APP_NAME.zip.sha256"))"
+fi
 
 if [[ "$MAKE_DMG" == "true" ]]; then
     step "Creating dist/$APP_NAME.dmg"

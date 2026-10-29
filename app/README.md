@@ -39,30 +39,42 @@ ekranları, seçim listeleri ve yönetici şifresi / Touch ID istemi aynen korun
 Önizlemeler ve taramalar ise terminalsiz çalışır ve sonuçları yerel arayüzde
 gösterilir; ham çıktı alttaki **Konsol** panelinde (⌘J) görülebilir.
 
-## Derleme
+## Kurulum ve güncelleme
+
+1. [Sürümler sayfasından](https://github.com/madduck666/MadMole/releases) en
+   yeni **MadMole 1.0.x** sürümünün `MadMole.dmg` dosyasını indirin.
+2. DMG'yi açın, **MadMole**'u **Applications** klasörüne sürükleyin.
+3. İlk açılışta Finder'da MadMole'a sağ tıklayıp **Aç** deyin (uygulama
+   ücretli Apple sertifikası yerine ad-hoc imzalı olduğu için bir kez gerekir).
+
+Bundan sonra DMG'ye gerek yok. Depoya her değişiklik gönderildiğinde GitHub
+Actions (`.github/workflows/app.yml`) yeni bir sürüm yayınlar
+(`madmole-<numara>` etiketiyle). Uygulama açılışta yeni sürümü denetler ve kenar
+çubuğunda **Güncelleme hazır** gösterir; ayrıca **MadMole › Güncellemeleri
+Denetle…** menüsü ve **Ayarlar › Güncellemeler** kartı vardır.
+**Güncelle ve Yeniden Başlat** dediğinizde uygulama:
+
+- yeni sürümü indirir ve SHA-256 özetini doğrular,
+- paket kimliğini, sürüm numarasını, Mole motorunu ve kod imzasını denetler,
+- kendini kapatır, eski kopyayı yeni kopya yerine oturana kadar yedekte tutar,
+  sonra yeni sürümü açar. Kopyalama başarısız olursa eski sürüm geri konur.
+
+Güncelleme, uygulama Uygulamalar klasöründeyken çalışır; DMG'nin içinden
+açılmış bir kopya kendini güncelleyemez.
+
+## Kaynaktan derleme (isteğe bağlı)
 
 Gereksinimler: Apple Silicon Mac, macOS 14 (Sonoma) veya üstü, Xcode ya da
 Command Line Tools (`xcode-select --install`) ve Go (`brew install go`).
-
-```bash
-./scripts/build_app.sh
-```
 
 ```bash
 ./scripts/build_app.sh --install
 ```
 
 `--install` uygulamayı `/Applications` klasörüne kopyalar ve açar; `--dmg`
-ayrıca `dist/MadMole.dmg` oluşturur. Çıktı: `app/.build/MadMole.app`.
-
-Her push'ta GitHub Actions (`.github/workflows/app.yml`) uygulamayı derler ve
-`MadMole-dmg` adlı bir artefakt yükler. İndirilen uygulama ad-hoc imzalı
-olduğu için ilk açılışta Gatekeeper uyarır; Finder'da sağ tıklayıp **Aç**
-deyin ya da:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/MadMole.app
-```
+`dist/MadMole.dmg`, `--zip` güncelleme paketi `dist/MadMole.zip` üretir.
+Yerelde derlenen kopyanın build numarası 0'dır, bu yüzden yayınlanmış her sürüm
+ona güncelleme olarak görünür.
 
 ## İlk açılış
 

@@ -184,6 +184,7 @@ final class AppModel {
     let uninstall = UninstallStore()
     let analyze = AnalyzeStore()
     let history = HistoryStore()
+    let updates = UpdateStore()
     let tools: [Page: ToolStore]
 
     init() {
@@ -207,6 +208,9 @@ final class AppModel {
     /// `MADMOLE_AUTORUN=1` starts its read-only scan; CI uses both to take
     /// screenshots of every page.
     private func applyLaunchOptions(_ environment: [String: String]) {
+        if environment["MADMOLE_UPDATE_SELFTEST"] == "1" {
+            updates.runSelfTest()
+        }
         if let appearance = environment["MADMOLE_APPEARANCE"], AppearanceMode(rawValue: appearance) != nil {
             UserDefaults.standard.set(appearance, forKey: AppearanceMode.storageKey)
         }

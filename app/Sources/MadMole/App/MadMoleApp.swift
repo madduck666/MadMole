@@ -29,6 +29,9 @@ struct MadMoleApp: App {
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(after: .appInfo) {
+                Button("Güncellemeleri Denetle…") { model.updates.check(userInitiated: true) }
+            }
             CommandGroup(replacing: .appSettings) {
                 Button("Ayarlar…") { model.page = .settings }
                     .keyboardShortcut(",", modifiers: .command)
