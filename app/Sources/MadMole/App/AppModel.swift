@@ -174,6 +174,23 @@ final class AppModel {
         for store in tools.values {
             store.console = console
         }
+        applyLaunchOptions(ProcessInfo.processInfo.environment)
+    }
+
+    /// `MADMOLE_START_PAGE=<page>` opens a page at launch and
+    /// `MADMOLE_AUTORUN=1` starts its read-only scan; CI uses both to take
+    /// screenshots of every page.
+    private func applyLaunchOptions(_ environment: [String: String]) {
+        guard let raw = environment["MADMOLE_START_PAGE"], let start = Page(rawValue: raw) else { return }
+        page = start
+        if environment["MADMOLE_CONSOLE"] == "1" { console.isVisible = true }
+        guard environment["MADMOLE_AUTORUN"] == "1" else { return }
+        switch start {
+        case .clean: clean.scan()
+        case .analyze: analyze.open(AnalyzeStore.Location(path: Engine.homeDirectory + "/Library"))
+        case .optimize, .purge, .installer, .slim: tools[start]?.preview()
+        default: break
+        }
     }
 
     func runInTerminal(

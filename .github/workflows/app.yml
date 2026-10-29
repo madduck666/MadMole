@@ -68,6 +68,43 @@ jobs:
           python3 -c "import json; json.load(open('/tmp/history.json')); print('history ok')"
           codesign --verify --strict --verbose=2 "$APP"
 
+      - name: Screenshot every page
+        continue-on-error: true
+        run: |
+          APP_BIN="app/.build/MadMole.app/Contents/MacOS/MadMole"
+          mkdir -p screenshots
+          shoot() {
+            local name="$1" page="$2" wait_s="$3"
+            MADMOLE_START_PAGE="$page" MADMOLE_AUTORUN=1 "$APP_BIN" > "screenshots/$name.log" 2>&1 &
+            local pid=$!
+            sleep "$wait_s"
+            screencapture -x "screenshots/$name.png" || echo "screencapture failed for $name"
+            kill "$pid" 2> /dev/null || true
+            wait "$pid" 2> /dev/null || true
+          }
+          shoot 1-dashboard dashboard 15
+          shoot 2-clean clean 120
+          shoot 3-uninstall uninstall 60
+          shoot 4-analyze analyze 60
+          shoot 5-optimize optimize 45
+          shoot 6-purge purge 30
+          shoot 7-history history 15
+          shoot 8-settings settings 10
+          defaults write -g AppleInterfaceStyle Dark
+          shoot 9-dashboard-dark dashboard 15
+          shoot 10-clean-dark clean 120
+          defaults delete -g AppleInterfaceStyle || true
+          ls -l screenshots
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: MadMole-screenshots
+          path: screenshots/
+          retention-days: 14
+          if-no-files-found: ignore
+
       - name: Upload DMG
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
