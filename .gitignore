@@ -93,3 +93,8 @@ mole_guidelines.md
 # Nix build output symlinks
 /result
 /result-*
+
+# MadMole.app build output (scripts/build_app.sh)
+app/.build/
+app/.swiftpm/
+/dist/

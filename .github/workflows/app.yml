@@ -1,0 +1,76 @@
+name: App
+
+# Builds MadMole.app (the native Apple Silicon front end) and publishes a DMG
+# as a workflow artifact.
+on:
+  push:
+    paths:
+      - 'app/**'
+      - 'cmd/**'
+      - 'bin/**'
+      - 'lib/**'
+      - 'mole'
+      - 'scripts/build_app.sh'
+      - '.github/workflows/app.yml'
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'scripts/build_app.sh'
+      - '.github/workflows/app.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build MadMole.app
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Toolchain
+        run: |
+          sw_vers
+          uname -m
+          xcodebuild -version
+          swift --version
+
+      - name: Analyze trash mode tests
+        run: go test ./cmd/analyze -run 'TrashMode|ParseArgs'
+
+      - name: Build app and DMG
+        run: ./scripts/build_app.sh --dmg
+
+      - name: Smoke test the bundled engine
+        run: |
+          APP="app/.build/MadMole.app"
+          ENGINE="$APP/Contents/Resources/engine"
+          file "$APP/Contents/MacOS/MadMole"
+          "$ENGINE/mole" --version
+          "$ENGINE/bin/status-go" --json > /tmp/status.json
+          python3 -c "import json; d=json.load(open('/tmp/status.json')); print('health', d['health_score'])"
+          "$ENGINE/bin/analyze-go" --json "$ENGINE/lib" > /tmp/analyze.json
+          python3 -c "import json; d=json.load(open('/tmp/analyze.json')); print('entries', len(d['entries']))"
+          "$ENGINE/mole" history --json --limit 5 > /tmp/history.json
+          python3 -c "import json; json.load(open('/tmp/history.json')); print('history ok')"
+          codesign --verify --strict --verbose=2 "$APP"
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: MadMole-dmg
+          path: dist/MadMole.dmg
+          retention-days: 30

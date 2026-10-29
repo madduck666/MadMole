@@ -19,7 +19,8 @@ import (
 )
 
 var (
-	jsonMode = flag.Bool("json", false, "output analysis as JSON instead of TUI")
+	jsonMode  = flag.Bool("json", false, "output analysis as JSON instead of TUI")
+	trashMode = flag.Bool("trash", false, "move the given absolute paths to Trash and report JSON results")
 )
 
 // usageText is the help every other Mole subcommand prints by hand. The Go flag
@@ -31,6 +32,8 @@ Explore disk usage. Without PATH, scans a machine-wide overview.
 
 Options:
   --json          Output the analysis as JSON instead of the interactive TUI
+  --trash PATH... Move absolute paths to the Trash with analyze's protections,
+                  logging each move, and print the result as JSON
   -h, --help      Show this help message
 
 Examples:
@@ -66,6 +69,10 @@ func parseArgs(args []string, stdout, stderr io.Writer) (int, bool) {
 func main() {
 	if code, keepGoing := parseArgs(os.Args[1:], os.Stdout, os.Stderr); !keepGoing {
 		os.Exit(code)
+	}
+
+	if *trashMode {
+		os.Exit(runTrashMode(flag.Args(), os.Stdout))
 	}
 
 	abs, isOverview, err := resolveScanTarget(os.Getenv("MO_ANALYZE_PATH"), flag.Args())
