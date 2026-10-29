@@ -6,6 +6,7 @@ struct SettingsView: View {
     @State private var hasFullDiskAccess = Permissions.hasFullDiskAccess
     @State private var touchIDStatus: String?
     @State private var loadingTouchID = false
+    @State private var copiedReport = false
     @AppStorage(AppearanceMode.storageKey) private var appearance = AppearanceMode.system.rawValue
 
     var body: some View {
@@ -95,6 +96,23 @@ struct SettingsView: View {
                     }
                 }
 
+                Card(title: "Sorun Bildir", symbol: "ladybug.fill", tint: Theme.red) {
+                    Text("Bir şey beklediğiniz gibi çalışmazsa bu düğmeyle sürüm, izin ve son motor çıktısını panoya kopyalayıp mesajınıza yapıştırın.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        Button {
+                            Diagnostics.copyReport(model: model)
+                            copiedReport = true
+                        } label: {
+                            Label(copiedReport ? "Kopyalandı" : "Tanılama Bilgisini Kopyala",
+                                  systemImage: copiedReport ? "checkmark" : "doc.on.clipboard")
+                        }
+                        Spacer()
+                    }
+                }
+
                 Card(title: "Hakkında", symbol: "info.circle.fill", tint: Theme.indigo) {
                     StatRow(title: "MadMole", value: "\(Engine.appVersion) (build \(UpdateClient.currentBuild))")
                     StatRow(title: "Mole motoru", value: Engine.version)
@@ -108,6 +126,9 @@ struct SettingsView: View {
                 }
             }
             .padding(24)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            hasFullDiskAccess = Permissions.hasFullDiskAccess
         }
         .onAppear {
             hasFullDiskAccess = Permissions.hasFullDiskAccess

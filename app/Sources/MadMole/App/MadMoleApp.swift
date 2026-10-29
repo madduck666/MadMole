@@ -32,6 +32,9 @@ struct MadMoleApp: App {
             CommandGroup(after: .appInfo) {
                 Button("Güncellemeleri Denetle…") { model.updates.check(userInitiated: true) }
             }
+            CommandGroup(replacing: .help) {
+                Button("Tanılama Bilgisini Kopyala") { Diagnostics.copyReport(model: model) }
+            }
             CommandGroup(replacing: .appSettings) {
                 Button("Ayarlar…") { model.page = .settings }
                     .keyboardShortcut(",", modifiers: .command)

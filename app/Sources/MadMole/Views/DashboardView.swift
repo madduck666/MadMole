@@ -32,6 +32,9 @@ struct DashboardView: View {
             store.start()
             hasFullDiskAccess = Permissions.hasFullDiskAccess
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            hasFullDiskAccess = Permissions.hasFullDiskAccess
+        }
         .onDisappear { store.stop() }
     }
 
@@ -67,14 +70,59 @@ struct DashboardView: View {
 // MARK: - Permissions
 
 enum Permissions {
-    /// The user TCC database is readable only with Full Disk Access.
-    static var hasFullDiskAccess: Bool {
-        let path = Engine.homeDirectory + "/Library/Application Support/com.apple.TCC/TCC.db"
-        if let handle = FileHandle(forReadingAtPath: path) {
-            try? handle.close()
-            return true
+    enum FullDiskAccess {
+        case granted
+        case denied
+        case unknown
+    }
+
+    /// Folders and files only Full Disk Access can read, the same probe the
+    /// engine uses (`has_full_disk_access` in lib/core/ui.sh) plus the user
+    /// TCC database. Existence is visible without access; reading proves it.
+    static let probePaths: [String] = [
+        "Library/Safari/LocalStorage",
+        "Library/Safari",
+        "Library/Mail",
+        "Library/Messages/chat.db",
+        "Library/Application Support/com.apple.TCC/TCC.db",
+    ]
+
+    struct ProbeResult {
+        let path: String
+        let exists: Bool
+        let readable: Bool
+    }
+
+    static func probe() -> [ProbeResult] {
+        let fm = FileManager.default
+        return probePaths.map { relative in
+            let path = Engine.homeDirectory + "/" + relative
+            var isDirectory: ObjCBool = false
+            guard fm.fileExists(atPath: path, isDirectory: &isDirectory) else {
+                return ProbeResult(path: path, exists: false, readable: false)
+            }
+            let readable: Bool
+            if isDirectory.boolValue {
+                readable = (try? fm.contentsOfDirectory(atPath: path)) != nil
+            } else if let handle = FileHandle(forReadingAtPath: path) {
+                try? handle.close()
+                readable = true
+            } else {
+                readable = false
+            }
+            return ProbeResult(path: path, exists: true, readable: readable)
         }
-        return false
+    }
+
+    static var fullDiskAccess: FullDiskAccess {
+        let results = probe().filter(\.exists)
+        if results.isEmpty { return .unknown }
+        return results.contains(where: \.readable) ? .granted : .denied
+    }
+
+    /// Only a confirmed denial counts as missing; an unknown state does not nag.
+    static var hasFullDiskAccess: Bool {
+        fullDiskAccess != .denied
     }
 
     static func openFullDiskAccessSettings() {
