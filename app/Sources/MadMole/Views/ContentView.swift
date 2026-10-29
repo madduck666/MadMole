@@ -77,7 +77,7 @@ private struct Sidebar: View {
                 Section(group.0) {
                     ForEach(group.1) { page in
                         SidebarRow(page: page)
-                            .tag(page)
+                            .tag(Optional(page))
                     }
                 }
             }
