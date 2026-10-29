@@ -158,6 +158,7 @@ private struct HealthCard: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(healthTitle(score))
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .fixedSize(horizontal: false, vertical: true)
                     if let message = snapshot.healthScoreMsg, !message.isEmpty {
                         Text(message)
                             .font(.callout)
@@ -188,8 +189,8 @@ private struct HealthCard: View {
     private func healthTitle(_ score: Int) -> String {
         switch score {
         case 80...: return "Mac'iniz harika durumda"
-        case 60..<80: return "İyi, küçük iyileştirmeler mümkün"
-        case 40..<60: return "Dikkat gerektiren noktalar var"
+        case 60..<80: return "İyi durumda"
+        case 40..<60: return "Dikkat gerekiyor"
         default: return "Bakım zamanı"
         }
     }
