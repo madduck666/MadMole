@@ -23,6 +23,13 @@ enum Diagnostics {
             lines.append("  \(TextUtils.abbreviatePath(probe.path)): \(state)")
         }
         lines.append("")
+        lines.append("Güncelleme günlüğü (son 15 satır):")
+        if let log = try? String(contentsOf: UpdateClient.updateLog, encoding: .utf8) {
+            lines.append(contentsOf: log.split(separator: "\n").suffix(15).map { "  " + $0 })
+        } else {
+            lines.append("  (yok)")
+        }
+        lines.append("")
         lines.append("Konsol (son 150 satır):")
         for line in model.console.lines.suffix(150) {
             lines.append("[\(line.source)] \(line.text)")

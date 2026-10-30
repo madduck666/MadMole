@@ -191,34 +191,49 @@ enum UpdateClient {
     /// Starts a small helper that waits for this process to quit, swaps the
     /// new bundle in (keeping the old one until the copy succeeds) and opens
     /// the updated app.
+    /// The helper's own log, so a swap that fails after the app quit still
+    /// leaves a reason behind (shown in the diagnostic report).
+    static var updateLog: URL {
+        Engine.logDirectory.appendingPathComponent("madmole-update.log")
+    }
+
     static func launchSwapper(newApp: URL, target: URL, workDirectory: URL) throws {
         let script = workDirectory.appendingPathComponent("swap.sh")
+        try FileManager.default.createDirectory(at: updateLog.deletingLastPathComponent(), withIntermediateDirectories: true)
         let body = """
         #!/bin/sh
-        pid="$1"; new_app="$2"; target="$3"
+        pid="$1"; new_app="$2"; target="$3"; log="$4"
+        say() { printf '%s %s\\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$log"; }
+        say "waiting for MadMole (pid $pid) to quit"
+        # Up to ten minutes, so a user's Force Quit still completes the swap.
         n=0
         while kill -0 "$pid" 2>/dev/null; do
-            n=$((n + 1)); [ "$n" -gt 300 ] && exit 1
+            n=$((n + 1))
+            if [ "$n" -gt 3000 ]; then say "FAILED: MadMole never quit"; exit 1; fi
             sleep 0.2
         done
         backup="${target%.app}.previous.app"
         [ -d "$backup" ] && rm -rf "$backup"
-        if mv "$target" "$backup"; then
-            if /usr/bin/ditto "$new_app" "$target"; then
+        if mv "$target" "$backup" 2>>"$log"; then
+            if /usr/bin/ditto "$new_app" "$target" 2>>"$log"; then
                 /usr/bin/xattr -dr com.apple.quarantine "$target" 2>/dev/null
                 rm -rf "$backup"
+                say "OK: installed $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$target/Contents/Info.plist" 2>/dev/null)"
                 /usr/bin/open "$target"
                 exit 0
             fi
+            say "FAILED: copy of the new version failed; restoring the old one"
             rm -rf "$target"
             mv "$backup" "$target"
+        else
+            say "FAILED: macOS did not allow replacing $target (check App Management for MadMole)"
         fi
         /usr/bin/open "$target"
         """
         try body.write(to: script, atomically: true, encoding: .utf8)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = [script.path, String(ProcessInfo.processInfo.processIdentifier), newApp.path, target.path]
+        process.arguments = [script.path, String(ProcessInfo.processInfo.processIdentifier), newApp.path, target.path, updateLog.path]
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
@@ -245,6 +260,7 @@ final class UpdateStore {
     private(set) var latest: AppRelease?
     private(set) var lastChecked: Date?
     var showSheet = false
+    @ObservationIgnored private var currentAttempt: UUID?
 
     var currentVersion: String { Engine.appVersion }
     var currentBuild: Int { UpdateClient.currentBuild }
@@ -269,8 +285,37 @@ final class UpdateStore {
     /// A quiet check at launch: an available update shows a banner, while
     /// errors stay silent.
     func checkAtLaunch() {
-        guard autoCheck, ProcessInfo.processInfo.environment["MADMOLE_START_PAGE"] == nil else { return }
+        guard ProcessInfo.processInfo.environment["MADMOLE_START_PAGE"] == nil else { return }
+        if reportFailedSwap() { return }
+        guard autoCheck else { return }
         check(userInitiated: false)
+    }
+
+    /// When the helper's last line in the update log is a recent failure the
+    /// user has not seen, show it once: the old copy was reopened, and this
+    /// is the only place the reason reaches the user.
+    private func reportFailedSwap() -> Bool {
+        guard let text = try? String(contentsOf: UpdateClient.updateLog, encoding: .utf8),
+              let last = text.split(separator: "\n").last.map(String.init),
+              last.contains("FAILED"),
+              UserDefaults.standard.string(forKey: "lastReportedUpdateFailure") != last else { return false }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        guard let when = formatter.date(from: String(last.prefix(19))),
+              Date().timeIntervalSince(when) < 30 * 60 else { return false }
+        UserDefaults.standard.set(last, forKey: "lastReportedUpdateFailure")
+        let reason: String
+        if last.contains("did not allow replacing") {
+            reason = "macOS, MadMole'un kendi kopyasını değiştirmesine izin vermedi. Sistem Ayarları › Gizlilik ve Güvenlik › Uygulama Yönetimi'nde MadMole'u açıp tekrar deneyin"
+        } else if last.contains("never quit") {
+            reason = "MadMole kapanmadı, yeni sürüm yerine konamadı"
+        } else {
+            reason = last.components(separatedBy: "FAILED:").last?.trimmingCharacters(in: .whitespaces) ?? last
+        }
+        phase = .failed("Son güncelleme kurulamadı. \(reason).")
+        showSheet = true
+        return true
     }
 
     func check(userInitiated: Bool) {
@@ -315,6 +360,16 @@ final class UpdateStore {
             return
         }
         phase = .downloading
+        let attempt = UUID()
+        currentAttempt = attempt
+        // A step that hangs must surface as an error, never as a sheet that
+        // spins forever.
+        Task {
+            try? await Task.sleep(nanoseconds: 180_000_000_000)
+            if self.currentAttempt == attempt, self.phase == .downloading || self.phase == .installing {
+                self.phase = .failed("Güncelleme 3 dakikada tamamlanmadı. İnternet bağlantınızı kontrol edip tekrar deneyin.")
+            }
+        }
         Task {
             do {
                 let work = try UpdateClient.makeWorkDirectory()
@@ -324,11 +379,30 @@ final class UpdateStore {
                 try await UpdateClient.verifyChecksum(of: zip, checksumURL: checksumURL, workDirectory: work)
                 self.phase = .installing
                 let app = try await UpdateClient.unpackAndVerify(zip, in: work, expectedBuild: release.build)
+                guard self.currentAttempt == attempt, self.phase == .installing else { return }
                 try UpdateClient.launchSwapper(newApp: app, target: target, workDirectory: work)
-                NSApp.terminate(nil)
+                self.quitForSwap()
             } catch {
-                self.phase = .failed(error.localizedDescription)
+                if self.currentAttempt == attempt {
+                    self.phase = .failed(error.localizedDescription)
+                }
             }
+        }
+    }
+
+    /// Quits so the helper can replace the bundle. An open sheet can make
+    /// AppKit ignore a terminate request, so the sheet closes first, and the
+    /// process exits on its own if termination still does not happen: there
+    /// is no unsaved state, and the helper is waiting for this pid to end.
+    private func quitForSwap() {
+        showSheet = false
+        Task {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            NSApp.terminate(nil)
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            exit(0)
+        }
+    }
         }
     }
 }

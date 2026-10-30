@@ -59,7 +59,14 @@ struct UpdateSheet: View {
         case .installing:
             progress("Doğrulanıyor ve kuruluyor; MadMole birazdan yeniden açılacak…")
         case let .failed(message):
-            ErrorBanner(message: message)
+            VStack(alignment: .leading, spacing: 10) {
+                ErrorBanner(message: message)
+                HStack {
+                    Button("Uygulama Yönetimi izni") { PrivacyPane.open(.appManagement) }
+                    Button("Tanılama Bilgisini Kopyala") { Diagnostics.copyReport(model: model) }
+                }
+                .controlSize(.small)
+            }
         }
     }
 
