@@ -81,6 +81,21 @@ final class UninstallStore {
         }
     }
 
+    /// What one real uninstall run did, read back from operations.log.
+    struct RunSummary: Identifiable {
+        let id = UUID()
+        let apps: [InstalledApp]
+        let removed: [OperationsLog.Entry]
+        let kept: [OperationsLog.Entry]
+        let fullDiskAccessMissing: Bool
+
+        var removedBytes: Int64 {
+            removed.reduce(0) { $0 + (TextUtils.parseSize($1.detail ?? "") ?? 0) }
+        }
+    }
+
+    var lastSummary: RunSummary?
+
     /// Apps a real uninstall run left in place, usually because macOS
     /// privacy settings refused the Trash move.
     var blockedApps: [InstalledApp] = []
@@ -90,7 +105,15 @@ final class UninstallStore {
     /// still on disk and that the engine logged as refused during this run
     /// (privacy-denied, trash-failed and similar) was blocked; one the user
     /// chose to keep at the confirmation has no such row and is left alone.
-    func noteFinishedRun(attempted: [InstalledApp], logOffset: UInt64) {
+    func noteFinishedRun(attempted: [InstalledApp], logOffset: UInt64, operationsOffset: UInt64) {
+        let entries = OperationsLog.entries(since: operationsOffset)
+            .filter { $0.command == "uninstall" }
+        let removed = entries.filter { ["TRASHED", "REMOVED"].contains($0.action) }
+        let kept = entries.filter { ["SKIPPED", "FAILED"].contains($0.action) }
+        if !removed.isEmpty || !kept.isEmpty {
+            lastSummary = RunSummary(apps: attempted, removed: removed, kept: kept,
+                                     fullDiskAccessMissing: Permissions.fullDiskAccess == .denied)
+        }
         let refused = Set(DeletionsLog.rows(since: logOffset)
             .filter { $0.status != "ok" && $0.status != "dry-run" }
             .map { URL(fileURLWithPath: $0.path).standardizedFileURL.path })

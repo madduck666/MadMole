@@ -60,6 +60,16 @@ struct UninstallView: View {
                 }
             }
         }
+        .sheet(item: Binding(
+            get: { store.blockedApps.isEmpty ? store.lastSummary : nil },
+            set: { if $0 == nil { store.lastSummary = nil } }
+        )) { summary in
+            UninstallSummarySheet(summary: summary) {
+                store.lastSummary = nil
+                model.page = .clean
+                model.clean.scan()
+            }
+        }
         .confirmationDialog("Seçili uygulamalar kaldırılsın mı?", isPresented: $confirmUninstall) {
             Button("Kaldırmaya Devam Et", role: .destructive) { run(dryRun: false) }
             Button("Vazgeç", role: .cancel) {}
@@ -187,6 +197,7 @@ struct UninstallView: View {
         if debug { arguments.append("--debug") }
         arguments += targets.map(\.uninstallName)
         let logOffset = DeletionsLog.currentOffset()
+        let operationsOffset = OperationsLog.currentOffset()
         model.runInTerminal(
             title: dryRun ? "Kaldırma Önizlemesi" : "Uygulama Kaldırma",
             subtitle: names,
@@ -199,7 +210,7 @@ struct UninstallView: View {
             // Wait for the terminal sheet to close before another sheet opens.
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 600_000_000)
-                store.noteFinishedRun(attempted: targets, logOffset: logOffset)
+                store.noteFinishedRun(attempted: targets, logOffset: logOffset, operationsOffset: operationsOffset)
             }
         }
     }
@@ -348,6 +359,160 @@ private struct UninstallBlockedSheet: View {
             if let button {
                 Button(button, action: action)
             }
+        }
+    }
+}
+
+/// After a real uninstall: what went to the Trash and, in plain Turkish,
+/// what the engine kept and why, with the one action that clears it later.
+private struct UninstallSummarySheet: View {
+    let summary: UninstallStore.RunSummary
+    let openClean: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                IconTile(symbol: summary.kept.isEmpty ? "checkmark.seal.fill" : "checklist",
+                         tint: summary.kept.isEmpty ? Theme.green : Page.uninstall.tint, size: 42)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(summary.kept.isEmpty ? "Kaldırma tamamlandı" : "Kaldırma tamamlandı, bazı dosyalar tutuldu")
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                    Text(summary.apps.map(\.name).joined(separator: ", "))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            HStack(spacing: 18) {
+                stat(value: "\(summary.removed.count)", label: "öğe kaldırıldı", tint: Theme.green)
+                if summary.removedBytes > 0 {
+                    stat(value: TextUtils.formatBytes(summary.removedBytes), label: "Çöp Sepeti'ne", tint: Theme.blue)
+                }
+                stat(value: "\(summary.kept.count)", label: "öğe tutuldu", tint: summary.kept.isEmpty ? Theme.gray : Theme.orange)
+            }
+
+            if !summary.kept.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Tutulanlar ve nedeni")
+                        .font(.headline)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(summary.kept) { entry in
+                                KeptRow(entry: entry)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 220)
+                }
+                Label("Tutulan dosyalar uygulamanın kendisi değildir; çoğu önbellek ya da ayar dosyasıdır. Uygulamayı tamamen kapattıktan sonra Akıllı Temizlik bunları bulup siler.",
+                      systemImage: "info.circle")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if summary.fullDiskAccessMissing {
+                Label("Tam Disk Erişimi kapalı görünüyor. Bu yüzden bazı artıklar bulunamamış ya da tutulmuş olabilir.",
+                      systemImage: "lock.shield")
+                    .font(.callout)
+                    .foregroundStyle(Theme.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Divider()
+
+            HStack {
+                if summary.fullDiskAccessMissing {
+                    Button("Tam Disk Erişimi") { PrivacyPane.open(.fullDiskAccess) }
+                }
+                Spacer()
+                Button("Kapat") { dismiss() }
+                if !summary.kept.isEmpty || summary.fullDiskAccessMissing {
+                    Button {
+                        openClean()
+                    } label: {
+                        Label("Akıllı Temizlik ile Tara", systemImage: Page.clean.symbol)
+                    }
+                    .buttonStyle(GradientButtonStyle(tint: Page.clean.tint))
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+        .padding(24)
+        .frame(width: 600)
+    }
+
+    private func stat(value: String, label: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(value)
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundStyle(tint)
+                .monospacedDigit()
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct KeptRow: View {
+    let entry: OperationsLog.Entry
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            FileIcon(path: entry.path, size: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(TextUtils.abbreviatePath(entry.path))
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(entry.path)
+                Text(Self.explain(entry.detail))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            if FileManager.default.fileExists(atPath: entry.path) {
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: entry.path)])
+                } label: {
+                    Image(systemName: "magnifyingglass.circle")
+                }
+                .buttonStyle(.borderless)
+                .help("Finder'da göster")
+            }
+        }
+    }
+
+    /// The engine's fixed reasons in plain Turkish.
+    static func explain(_ reason: String?) -> String {
+        switch reason ?? "" {
+        case "live user cache":
+            return "Uygulama hâlâ çalışıyor olabilir (örneğin menü çubuğunda). Çalışan bir programın dosyası silinmez."
+        case "privacy permission denied":
+            return "macOS izin vermedi. Ayarlar › İzinler'den Uygulama Yönetimi ve Tam Disk Erişimi'ni açın."
+        case "whitelist":
+            return "Korunan yollar listenizde olduğu için dokunulmadı."
+        case "protected":
+            return "Mole'un koruma kurallarına takıldı (sistem dosyası ya da başka uygulamalarla paylaşılan bir dosya)."
+        case "active or unknown SQLite database":
+            return "İçindeki bir veritabanı açık görünüyordu; bozulmasın diye bırakıldı."
+        case "active or unknown download":
+            return "Süren bir indirme olabilir; yarıda kalmasın diye bırakıldı."
+        case "identity changed", "path identity unavailable":
+            return "Dosya tarama ile silme arasında değişti ya da doğrulanamadı; güvenlik için dokunulmadı."
+        case "trash-failed":
+            return "Çöp Sepeti'ne taşınamadı."
+        case "mutable-parent":
+            return "Bulunduğu klasörün yapısı güvenli bulunmadı; dokunulmadı."
+        case "sink guard denied":
+            return "Son güvenlik kontrolü silmeye izin vermedi."
+        case "":
+            return "Neden belirtilmedi."
+        case let other:
+            return "Motorun notu: \(other)"
         }
     }
 }

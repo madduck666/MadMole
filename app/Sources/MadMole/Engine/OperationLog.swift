@@ -139,3 +139,53 @@ enum DeletionsLog {
             }
     }
 }
+
+/// Reads the operations.log rows one engine run appended:
+/// `[YYYY-mm-dd HH:MM:SS] [command run=<id>] ACTION path (detail)`.
+enum OperationsLog {
+    struct Entry: Identifiable, Hashable {
+        let id = UUID()
+        let command: String
+        let action: String
+        let path: String
+        let detail: String?
+    }
+
+    static var file: URL { Engine.logDirectory.appendingPathComponent("operations.log") }
+
+    static func currentOffset() -> UInt64 {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: file.path)
+        return (attributes?[.size] as? NSNumber)?.uint64Value ?? 0
+    }
+
+    static func entries(since offset: UInt64) -> [Entry] {
+        guard let handle = try? FileHandle(forReadingFrom: file) else { return [] }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        guard size > offset else { return [] }
+        try? handle.seek(toOffset: offset)
+        let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
+        return text.split(separator: "\n").compactMap { parse(String($0)) }
+    }
+
+    static func parse(_ line: String) -> Entry? {
+        // "[" + 19-character timestamp + "] [".
+        guard line.hasPrefix("["), line.count > 24 else { return nil }
+        let afterStamp = line.dropFirst(22)
+        guard afterStamp.hasPrefix("["), let close = afterStamp.firstIndex(of: "]") else { return nil }
+        let field = afterStamp[afterStamp.index(after: afterStamp.startIndex)..<close]
+        let command = String(field.split(separator: " ").first ?? "")
+        var rest = afterStamp[afterStamp.index(after: close)...].drop { $0 == " " }
+        guard let space = rest.firstIndex(of: " ") else { return nil }
+        let action = String(rest[..<space])
+        rest = rest[rest.index(after: space)...]
+        var path = String(rest)
+        var detail: String?
+        if path.hasSuffix(")"), let open = path.range(of: " (", options: .backwards) {
+            detail = String(path[open.upperBound..<path.index(before: path.endIndex)])
+            path = String(path[..<open.lowerBound])
+        }
+        guard !action.isEmpty, !path.isEmpty else { return nil }
+        return Entry(command: command, action: action, path: path, detail: detail)
+    }
+}
