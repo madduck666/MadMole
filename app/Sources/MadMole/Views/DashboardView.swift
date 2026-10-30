@@ -132,6 +132,19 @@ enum Permissions {
     }
 }
 
+/// Deep links into System Settings > Privacy & Security.
+enum PrivacyPane: String {
+    case fullDiskAccess = "Privacy_AllFiles"
+    case appManagement = "Privacy_AppBundles"
+    case automation = "Privacy_Automation"
+
+    static func open(_ pane: PrivacyPane) {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane.rawValue)") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+}
+
 struct FullDiskAccessBanner: View {
     var recheck: () -> Void
 

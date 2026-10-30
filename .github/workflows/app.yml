@@ -81,6 +81,9 @@ jobs:
           "$ENGINE/mole" history --json --limit 5 > /tmp/history.json
           python3 -c "import json; json.load(open('/tmp/history.json')); print('history ok')"
           codesign --verify --strict --verbose=2 "$APP"
+          # Without this key macOS refuses Finder automation from the app
+          # silently, and uninstall cannot reach Finder's Trash fallback.
+          /usr/libexec/PlistBuddy -c "Print :NSAppleEventsUsageDescription" "$APP/Contents/Info.plist"
 
       - name: UI test, click every sidebar page
         run: |

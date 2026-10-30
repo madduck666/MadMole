@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 
@@ -80,21 +81,66 @@ final class UninstallStore {
         }
     }
 
+    /// Apps a real uninstall run left in place, usually because macOS
+    /// privacy settings refused the Trash move.
+    var blockedApps: [InstalledApp] = []
+    private(set) var fallbackMessage: String?
+
+    /// Called when a real uninstall run closes. A selected bundle that is
+    /// still on disk and that the engine logged as refused during this run
+    /// (privacy-denied, trash-failed and similar) was blocked; one the user
+    /// chose to keep at the confirmation has no such row and is left alone.
+    func noteFinishedRun(attempted: [InstalledApp], logOffset: UInt64) {
+        let refused = Set(DeletionsLog.rows(since: logOffset)
+            .filter { $0.status != "ok" && $0.status != "dry-run" }
+            .map { URL(fileURLWithPath: $0.path).standardizedFileURL.path })
+        fallbackMessage = nil
+        blockedApps = attempted.filter { app in
+            FileManager.default.fileExists(atPath: app.path)
+                && refused.contains(URL(fileURLWithPath: app.path).standardizedFileURL.path)
+        }
+    }
+
+    /// The last resort for a bundle the engine could not move: ask macOS
+    /// itself (NSWorkspace, the same service Finder uses), which shows its own
+    /// password prompt when the bundle needs one. Only exact `.app` bundles
+    /// directly inside an Applications folder qualify, never Apple's own.
+    static func canTrashDirectly(_ app: InstalledApp) -> Bool {
+        let url = URL(fileURLWithPath: app.path).standardizedFileURL
+        let parent = url.deletingLastPathComponent().path
+        let allowedParents = ["/Applications", Engine.homeDirectory + "/Applications"]
+        return url.pathExtension.lowercased() == "app"
+            && allowedParents.contains(parent)
+            && !app.bundleId.lowercased().hasPrefix("com.apple.")
+    }
+
+    func trashDirectly(_ app: InstalledApp) {
+        guard Self.canTrashDirectly(app) else {
+            fallbackMessage = "\(app.name) bu yolla taşınamaz."
+            return
+        }
+        let url = URL(fileURLWithPath: app.path)
+        let size = app.sizeBytes
+        NSWorkspace.shared.recycle([url]) { trashed, error in
+            Task { @MainActor in
+                let log = OperationLog(command: "uninstall")
+                if error == nil, !trashed.isEmpty, !FileManager.default.fileExists(atPath: url.path) {
+                    log.recordTrash(path: url.path, sizeBytes: size, succeeded: true)
+                    self.fallbackMessage = "\(app.name) Çöp Sepeti'ne taşındı. Kalan artıkları Akıllı Temizlik bulur."
+                    self.load()
+                } else {
+                    log.recordTrash(path: url.path, sizeBytes: size, succeeded: false)
+                    self.fallbackMessage = "macOS \(app.name) için de izin vermedi: \(error?.localizedDescription ?? "bilinmeyen hata")"
+                }
+            }
+        }
+    }
+
     func toggle(_ app: InstalledApp) {
         if selection.contains(app.id) {
             selection.remove(app.id)
         } else {
             selection.insert(app.id)
         }
-    }
-
-    /// Arguments for `mo uninstall`; the engine matches each name and shows
-    /// the exact plan before anything is removed.
-    func uninstallArguments(dryRun: Bool, withData: Bool) -> [String] {
-        var args = ["uninstall"]
-        if dryRun { args.append("--dry-run") }
-        if withData { args.append("--with-data") }
-        args.append(contentsOf: selectedApps.map(\.uninstallName))
-        return args
     }
 }

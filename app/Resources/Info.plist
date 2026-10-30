@@ -34,6 +34,8 @@
 	</array>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>MadMole, kaldırdığınız uygulamaları Çöp Sepeti'ne taşımak için Finder'dan yardım ister.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>

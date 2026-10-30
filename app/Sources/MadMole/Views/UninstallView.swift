@@ -47,6 +47,19 @@ struct UninstallView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: store.selection.isEmpty)
         .onAppear { store.loadIfNeeded() }
+        .sheet(isPresented: Binding(
+            get: { !store.blockedApps.isEmpty },
+            set: { if !$0 { store.blockedApps = [] } }
+        )) {
+            UninstallBlockedSheet(store: store) { apps in
+                store.blockedApps = []
+                // Let this sheet close before the terminal sheet opens.
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    run(dryRun: false, debug: true, apps: apps)
+                }
+            }
+        }
         .confirmationDialog("Seçili uygulamalar kaldırılsın mı?", isPresented: $confirmUninstall) {
             Button("Kaldırmaya Devam Et", role: .destructive) { run(dryRun: false) }
             Button("Vazgeç", role: .cancel) {}
@@ -165,17 +178,28 @@ struct UninstallView: View {
         .overlay(alignment: .top) { Divider() }
     }
 
-    private func run(dryRun: Bool) {
-        let names = store.selectedApps.map(\.name).joined(separator: ", ")
+    private func run(dryRun: Bool, debug: Bool = false, apps: [InstalledApp]? = nil) {
+        let targets = apps ?? store.selectedApps
+        let names = targets.map(\.name).joined(separator: ", ")
+        var arguments = ["uninstall"]
+        if dryRun { arguments.append("--dry-run") }
+        if withData { arguments.append("--with-data") }
+        if debug { arguments.append("--debug") }
+        arguments += targets.map(\.uninstallName)
+        let logOffset = DeletionsLog.currentOffset()
         model.runInTerminal(
             title: dryRun ? "Kaldırma Önizlemesi" : "Uygulama Kaldırma",
             subtitle: names,
-            arguments: store.uninstallArguments(dryRun: dryRun, withData: withData),
+            arguments: arguments,
             tint: Page.uninstall.tint
         ) { _ in
-            if !dryRun {
-                store.selection.removeAll()
-                store.load()
+            guard !dryRun else { return }
+            store.selection.removeAll()
+            store.load()
+            // Wait for the terminal sheet to close before another sheet opens.
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                store.noteFinishedRun(attempted: targets, logOffset: logOffset)
             }
         }
     }
@@ -238,6 +262,92 @@ private struct AppRow: View {
                 NSPasteboard.general.setString(app.bundleId, forType: .string)
             }
             .disabled(app.bundleId.isEmpty)
+        }
+    }
+}
+
+/// Shown when macOS refused to move a selected app to the Trash: the two
+/// privacy settings involved, a retry with a detailed log, and a last-resort
+/// Trash move through macOS itself.
+private struct UninstallBlockedSheet: View {
+    let store: UninstallStore
+    let retry: ([InstalledApp]) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                IconTile(symbol: "hand.raised.fill", tint: Theme.orange, size: 42)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("macOS kaldırmaya izin vermedi")
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                    Text(store.blockedApps.map(\.name).joined(separator: ", "))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Text("macOS, başka bir uygulamanın Uygulamalar klasöründeki programları değiştirmesini özel izinle sınırlar. MadMole'a bu izni bir kez verdiğinizde kaldırma çalışır.")
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 10) {
+                step(1, "Uygulama Yönetimi listesinde MadMole'u açın.", button: "Uygulama Yönetimi") {
+                    PrivacyPane.open(.appManagement)
+                }
+                step(2, "Otomasyon listesinde MadMole altındaki Finder anahtarını açın. Liste boşsa \"Tekrar Dene\" sonrası macOS size soracak; İzin Ver deyin.", button: "Otomasyon") {
+                    PrivacyPane.open(.automation)
+                }
+                step(3, "Kaldırmak istediğiniz uygulama açıksa kapatın, sonra Tekrar Dene'ye basın.", button: nil) {}
+            }
+
+            if let message = store.fallbackMessage {
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Divider()
+
+            HStack {
+                let direct = store.blockedApps.filter {
+                    UninstallStore.canTrashDirectly($0) && FileManager.default.fileExists(atPath: $0.path)
+                }
+                if !direct.isEmpty {
+                    Button("macOS ile Çöp'e Taşı") {
+                        for app in direct { store.trashDirectly(app) }
+                    }
+                    .help("Uygulamayı macOS'un kendi Çöp Sepeti hizmetiyle taşır; gerekirse Mac şifrenizi sorar. Artıkları daha sonra Akıllı Temizlik bulur.")
+                }
+                Spacer()
+                Button("Kapat") { dismiss() }
+                Button("Tekrar Dene") {
+                    let apps = store.blockedApps
+                    retry(apps)
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(GradientButtonStyle(tint: Page.uninstall.tint))
+            }
+        }
+        .padding(24)
+        .frame(width: 560)
+    }
+
+    private func step(_ number: Int, _ text: String, button: String?, action: @escaping () -> Void) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text("\(number)")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(Theme.orange))
+            Text(text)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            if let button {
+                Button(button, action: action)
+            }
         }
     }
 }

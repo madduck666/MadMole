@@ -49,6 +49,17 @@ struct SettingsView: View {
                         Button("Kontrol Et") { hasFullDiskAccess = Permissions.hasFullDiskAccess }
                             .buttonStyle(.borderless)
                     }
+                    Divider()
+                    permissionRow(
+                        title: "Uygulama Yönetimi",
+                        detail: "Uygulama Kaldırıcı'nın Uygulamalar klasöründeki programları Çöp'e taşıyabilmesi için gerekli.",
+                        pane: .appManagement
+                    )
+                    permissionRow(
+                        title: "Otomasyon › Finder",
+                        detail: "Bazı uygulamalar yalnızca Finder aracılığıyla Çöp'e taşınabilir. macOS ilk seferde sorar; İzin Ver deyin.",
+                        pane: .automation
+                    )
                 }
 
                 Card(title: "Korunan Yollar", symbol: "shield.lefthalf.filled", tint: Theme.teal) {
@@ -133,6 +144,23 @@ struct SettingsView: View {
         .onAppear {
             hasFullDiskAccess = Permissions.hasFullDiskAccess
             refreshTouchID()
+        }
+    }
+
+    private func permissionRow(title: String, detail: String, pane: PrivacyPane) -> some View {
+        HStack {
+            Image(systemName: "questionmark.circle")
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .fontWeight(.medium)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            Button("Ayarları Aç") { PrivacyPane.open(pane) }
         }
     }
 
