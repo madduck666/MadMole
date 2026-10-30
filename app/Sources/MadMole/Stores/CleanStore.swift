@@ -31,19 +31,21 @@ final class CleanStore {
         return false
     }
 
-    func scan() {
+    func scan(verbose: Bool = false) {
         guard !isScanning else { return }
+        let arguments = ["clean", "--dry-run"] + (verbose ? ["--debug"] : [])
+        if verbose { console?.isVisible = true }
         phase = .scanning
         lastLine = ""
         let started = Date()
         startedAt = started
         lastActivity = started
         systemPreviewIncluded = false
-        console?.append("mo clean --dry-run", source: "clean")
+        console?.append("mo " + arguments.joined(separator: " "), source: "clean")
         let consoleSink = console?.sink(source: "clean")
         task = Task {
             do {
-                let result = try await CommandRunner.mole(["clean", "--dry-run"]) { line in
+                let result = try await CommandRunner.mole(arguments) { line in
                     consoleSink?(line)
                     Task { @MainActor in self.noteLine(line) }
                 }

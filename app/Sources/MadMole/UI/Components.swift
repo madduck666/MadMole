@@ -314,6 +314,7 @@ struct WorkingPanel: View {
     /// what can hold a scan up.
     var lastActivity: Date?
     var note: String?
+    var onRestartVerbose: (() -> Void)?
     var onCancel: (() -> Void)?
 
     static let quietLimit: TimeInterval = 60
@@ -352,7 +353,7 @@ struct WorkingPanel: View {
                 TimelineView(.periodic(from: lastActivity, by: 5)) { context in
                     let quiet = context.date.timeIntervalSince(lastActivity)
                     if quiet >= Self.quietLimit {
-                        QuietScanHint(seconds: Int(quiet))
+                        QuietScanHint(seconds: Int(quiet), onRestartVerbose: onRestartVerbose)
                     }
                 }
             }
@@ -370,6 +371,7 @@ struct WorkingPanel: View {
 /// up, and where to look.
 struct QuietScanHint: View {
     let seconds: Int
+    var onRestartVerbose: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -383,6 +385,10 @@ struct QuietScanHint: View {
             HStack {
                 Button("Tam Disk Erişimi") { PrivacyPane.open(.fullDiskAccess) }
                 Button("Diğer pencereleri göster") { NSApp.activate(ignoringOtherApps: true); NSApp.arrangeInFront(nil) }
+                if let onRestartVerbose {
+                    Button("Ayrıntılı günlükle yeniden başlat", action: onRestartVerbose)
+                        .help("Taramayı --debug ile baştan başlatır; motorun o an hangi adımda olduğu ekranda ve konsolda görünür")
+                }
             }
             .controlSize(.small)
         }

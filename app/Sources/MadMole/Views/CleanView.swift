@@ -6,13 +6,14 @@ struct CleanView: View {
     let store: CleanStore
     @State private var expanded: Set<String> = []
     @State private var confirmClean = false
+    @State private var confirmScanWithoutAccess = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PageHeader(page: .clean) {
                 if case .loaded = store.phase {
                     Button {
-                        store.scan()
+                        startScan()
                     } label: {
                         Label("Yeniden Tara", systemImage: "arrow.clockwise")
                     }
@@ -49,7 +50,7 @@ struct CleanView: View {
                     ]
                 ) {
                     Button {
-                        store.scan()
+                        startScan()
                     } label: {
                         Label("Taramayı Başlat", systemImage: "magnifyingglass")
                     }
@@ -60,7 +61,11 @@ struct CleanView: View {
                 WorkingPanel(title: "Temizlenebilir dosyalar aranıyor…", detail: store.lastLine,
                              tint: Page.clean.tint, startedAt: store.startedAt,
                              lastActivity: store.lastActivity,
-                             note: "İlk tarama, uygulama ve geliştirici aracı sayısına göre birkaç dakika sürebilir.") {
+                             note: "İlk tarama, uygulama ve geliştirici aracı sayısına göre birkaç dakika sürebilir.",
+                             onRestartVerbose: {
+                                 store.cancel()
+                                 store.scan(verbose: true)
+                             }) {
                     store.cancel()
                 }
             case let .failed(message):
@@ -74,6 +79,13 @@ struct CleanView: View {
                     results(preview)
                 }
             }
+        }
+        .confirmationDialog("Tam Disk Erişimi kapalı", isPresented: $confirmScanWithoutAccess) {
+            Button("Önce İzin Ver") { PrivacyPane.open(.fullDiskAccess) }
+            Button("Yine de Tara") { store.scan() }
+            Button("Vazgeç", role: .cancel) {}
+        } message: {
+            Text("İzin olmadan macOS, başka uygulamaların klasörleri için tek tek soru sorar ve tarama her soruda cevabınızı bekler; bu yüzden uzun sürebilir ya da takılmış gibi görünebilir. Güncellemeden sonra izin düştüyse MadMole'u listeden çıkarıp yeniden ekleyin.")
         }
         .confirmationDialog("Temizlik başlatılsın mı?", isPresented: $confirmClean) {
             Button("Temizliği Başlat") { startClean() }
@@ -89,7 +101,7 @@ struct CleanView: View {
     private func results(_ preview: CleanPreview) -> some View {
         if preview.sections.isEmpty {
             HeroPrompt(page: .clean, title: "Her şey tertemiz", message: "Şu an temizlenecek bir şey bulunamadı. Daha sonra tekrar tarayabilirsiniz.") {
-                Button("Yeniden Tara") { store.scan() }
+                Button("Yeniden Tara") { startScan() }
             }
         } else {
             VStack(spacing: 0) {
@@ -213,6 +225,14 @@ struct CleanView: View {
         .overlay(
             RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous).strokeBorder(Theme.hairline)
         )
+    }
+
+    private func startScan() {
+        if Permissions.fullDiskAccess == .denied {
+            confirmScanWithoutAccess = true
+        } else {
+            store.scan()
+        }
     }
 
     private func startClean() {
