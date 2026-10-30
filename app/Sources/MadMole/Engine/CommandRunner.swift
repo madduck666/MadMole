@@ -118,11 +118,21 @@ enum CommandRunner {
                         continuation.resume(throwing: error)
                         return
                     }
+                    // stderr streams to the same line handler: the engine prints
+                    // its warnings there, and they are the only sign of life in
+                    // some long steps.
                     let group = DispatchGroup()
                     group.enter()
                     DispatchQueue.global(qos: .utility).async {
-                        let data = errPipe.fileHandleForReading.readDataToEndOfFile()
-                        buffer.setStderr(data)
+                        let errors = OutputBuffer()
+                        let errHandle = errPipe.fileHandleForReading
+                        while true {
+                            let chunk = errHandle.availableData
+                            if chunk.isEmpty { break }
+                            errors.appendStdout(chunk, lineHandler: onLine)
+                        }
+                        errors.flushPending(lineHandler: onLine)
+                        buffer.setStderr(errors.result(status: 0).stdout)
                         group.leave()
                     }
                     let handle = outPipe.fileHandleForReading

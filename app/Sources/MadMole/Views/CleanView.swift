@@ -58,7 +58,9 @@ struct CleanView: View {
                 }
             case .scanning:
                 WorkingPanel(title: "Temizlenebilir dosyalar aranıyor…", detail: store.lastLine,
-                             tint: Page.clean.tint, startedAt: store.startedAt) {
+                             tint: Page.clean.tint, startedAt: store.startedAt,
+                             lastActivity: store.lastActivity,
+                             note: "İlk tarama, uygulama ve geliştirici aracı sayısına göre birkaç dakika sürebilir.") {
                     store.cancel()
                 }
             case let .failed(message):

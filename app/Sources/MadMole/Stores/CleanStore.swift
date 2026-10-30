@@ -19,6 +19,9 @@ final class CleanStore {
     private(set) var lastLine = ""
     private(set) var startedAt: Date?
     private(set) var lastScan: Date?
+    /// When the engine last printed anything; drives the "no output for a
+    /// while" hint on the scanning screen.
+    private(set) var lastActivity: Date?
     private(set) var systemPreviewIncluded = false
     var console: ConsoleLog?
     private var task: Task<Void, Never>?
@@ -34,6 +37,7 @@ final class CleanStore {
         lastLine = ""
         let started = Date()
         startedAt = started
+        lastActivity = started
         systemPreviewIncluded = false
         console?.append("mo clean --dry-run", source: "clean")
         let consoleSink = console?.sink(source: "clean")
@@ -61,6 +65,8 @@ final class CleanStore {
     private func noteLine(_ line: String) {
         let text = TextUtils.stripANSI(line).trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
+        lastActivity = Date()
+        guard !TextUtils.isDecoration(text) else { return }
         lastLine = text
         if text.contains("system preview included") {
             systemPreviewIncluded = true

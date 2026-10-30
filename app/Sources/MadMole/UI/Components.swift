@@ -310,7 +310,13 @@ struct WorkingPanel: View {
     var detail: String?
     var tint: Color
     var startedAt: Date?
+    /// When output last arrived; after a minute of silence the panel says
+    /// what can hold a scan up.
+    var lastActivity: Date?
+    var note: String?
     var onCancel: (() -> Void)?
+
+    static let quietLimit: TimeInterval = 60
 
     var body: some View {
         VStack(spacing: 16) {
@@ -335,6 +341,21 @@ struct WorkingPanel: View {
                     .truncationMode(.middle)
                     .frame(maxWidth: 520)
             }
+            if let note {
+                Text(note)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 460)
+            }
+            if let lastActivity {
+                TimelineView(.periodic(from: lastActivity, by: 5)) { context in
+                    let quiet = context.date.timeIntervalSince(lastActivity)
+                    if quiet >= Self.quietLimit {
+                        QuietScanHint(seconds: Int(quiet))
+                    }
+                }
+            }
             if let onCancel {
                 Button("Vazgeç", role: .cancel, action: onCancel)
                     .controlSize(.regular)
@@ -342,6 +363,32 @@ struct WorkingPanel: View {
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Shown when a scan has printed nothing for a while: what usually holds it
+/// up, and where to look.
+struct QuietScanHint: View {
+    let seconds: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("\(seconds / 60) dakikadır yeni çıktı yok", systemImage: "hourglass")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(Theme.orange)
+            Text("Uygulama klasörleri gibi büyük adımlar bitene kadar satır yazmaz; bu normal olabilir. Ama macOS bir izin penceresi açmışsa tarama sizin cevabınızı bekler: ekranda ya da Dock'ta MadMole'dan bir soru var mı bakın. Güncellemeden sonra Tam Disk Erişimi düşmüşse bu sorular daha sık çıkar.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Tam Disk Erişimi") { PrivacyPane.open(.fullDiskAccess) }
+                Button("Diğer pencereleri göster") { NSApp.activate(ignoringOtherApps: true); NSApp.arrangeInFront(nil) }
+            }
+            .controlSize(.small)
+        }
+        .padding(12)
+        .frame(maxWidth: 520, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.orange.opacity(0.10)))
     }
 }
 

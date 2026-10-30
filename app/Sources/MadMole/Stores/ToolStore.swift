@@ -114,9 +114,6 @@ final class ToolStore {
                     consoleSink?(line)
                     Task { @MainActor in self.append(line) }
                 }
-                if !result.stderr.isEmpty {
-                    for line in result.stderr.components(separatedBy: "\n") { self.append(line) }
-                }
                 self.exitStatus = result.status
             } catch {
                 self.append(error.localizedDescription)
