@@ -403,6 +403,4 @@ final class UpdateStore {
             exit(0)
         }
     }
-        }
-    }
 }
