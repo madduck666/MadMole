@@ -293,6 +293,9 @@ final class UpdateStore {
     /// can prove an older copy updates itself from the real releases.
     func runSelfTest() {
         phase = .checking
+        // Run with the update sheet on screen, as a user does: that is the
+        // state the quit-and-swap step has to work in.
+        showSheet = true
         Task {
             self.latest = try? await UpdateClient.fetchLatest()
             self.phase = self.updateAvailable ? .available : .upToDate
