@@ -62,6 +62,29 @@ Denetle…** menüsü ve **Ayarlar › Güncellemeler** kartı vardır.
 Güncelleme, uygulama Uygulamalar klasöründeyken çalışır; DMG'nin içinden
 açılmış bir kopya kendini güncelleyemez.
 
+### İzinlerin güncellemelerde korunması (bir kerelik)
+
+macOS, Tam Disk Erişimi ve Uygulama Yönetimi izinlerini uygulamanın imzasına
+bağlar. Geçici (ad hoc) imza her derlemede değiştiği için izinler her
+güncellemede düşer. Bunu önlemek için depoya bir kez kendi imza sertifikanızı
+ekleyin; gizli anahtar yalnızca kendi Mac'inizde üretilir ve GitHub'ın gizli
+değişkenlerinde saklanır.
+
+1. Mac'te Terminal'i açıp şunu çalıştırın; sertifika üretilir ve panoya
+   kopyalanır:
+
+   ```bash
+   cd "$(mktemp -d)" && printf '[req]\ndistinguished_name=dn\nx509_extensions=ext\nprompt=no\n[dn]\nCN=MadMole Code Signing\n[ext]\nbasicConstraints=critical,CA:false\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=critical,codeSigning\n' > cert.cnf && /usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 3650 -config cert.cnf && /usr/bin/openssl pkcs12 -export -inkey key.pem -in cert.pem -name "MadMole Code Signing" -out madmole.p12 -passout pass:madmole && base64 -i madmole.p12 | pbcopy && rm key.pem && echo "Hazir: sertifika panoya kopyalandi"
+   ```
+
+2. GitHub'da depo › **Settings › Secrets and variables › Actions › New
+   repository secret**: Name `MADMOLE_SIGNING_P12`, Secret alanına panodakini
+   yapıştırın, **Add secret**.
+
+Bundan sonraki her sürüm bu sertifikayla imzalanır. Bu sürüme geçtikten sonra
+Tam Disk Erişimi'ni son bir kez yeniden vermeniz yeter; güncelleyici de yeni
+sürümü yalnızca aynı sertifikayla imzalanmışsa kurar.
+
 ## Kaynaktan derleme (isteğe bağlı)
 
 Gereksinimler: Apple Silicon Mac, macOS 14 (Sonoma) veya üstü, Xcode ya da

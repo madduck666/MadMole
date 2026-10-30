@@ -2,6 +2,29 @@ import AppKit
 import CryptoKit
 import Foundation
 import Observation
+import Security
+
+/// The running bundle's code signature, read through the Security framework.
+enum SigningInfo {
+    /// The designated requirement macOS privacy permissions are keyed on,
+    /// for example `identifier "…" and certificate leaf = H"…"`.
+    static func designatedRequirement(of url: URL = Bundle.main.bundleURL) -> String? {
+        var code: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess, let code else { return nil }
+        var requirement: SecRequirement?
+        guard SecCodeCopyDesignatedRequirement(code, [], &requirement) == errSecSuccess, let requirement else { return nil }
+        var text: CFString?
+        guard SecRequirementCopyString(requirement, [], &text) == errSecSuccess, let text else { return nil }
+        return text as String
+    }
+
+    /// True when signed with a certificate rather than ad hoc. Only then do
+    /// permissions survive an update, because an ad-hoc requirement is the
+    /// build's own code hash.
+    static var usesCertificate: Bool {
+        designatedRequirement()?.contains("certificate") == true
+    }
+}
 
 /// One MadMole build published as a GitHub release tagged `madmole-<build>`.
 struct AppRelease: Equatable {
@@ -185,6 +208,13 @@ enum UpdateClient {
         }
         let signature = try await CommandRunner.run("/usr/bin/codesign", ["--verify", "--deep", "--strict", app.path])
         guard signature.succeeded else { throw UpdateError.invalidBundle("kod imzası geçersiz") }
+        // A certificate-signed install accepts only an update signed by the
+        // same certificate: that keeps its privacy permissions and refuses a
+        // build signed by anyone else.
+        if let requirement = SigningInfo.designatedRequirement(), requirement.contains("certificate") {
+            let sameSigner = try await CommandRunner.run("/usr/bin/codesign", ["--verify", "--deep", "--strict", "-R=" + requirement, app.path])
+            guard sameSigner.succeeded else { throw UpdateError.invalidBundle("yeni sürüm aynı sertifikayla imzalanmamış") }
+        }
         return app
     }
 

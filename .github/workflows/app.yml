@@ -61,8 +61,37 @@ jobs:
       - name: Analyze trash mode tests
         run: go test ./cmd/analyze -run 'TrashMode|ParseArgs'
 
+      - name: Load the signing certificate
+        id: signing
+        env:
+          # A self-signed code-signing certificate (PKCS#12, base64). With it
+          # every build has the same designated requirement, so macOS keeps
+          # the app's privacy permissions across updates. Without it the build
+          # falls back to an ad-hoc signature.
+          SIGNING_P12: ${{ secrets.MADMOLE_SIGNING_P12 }}
+        run: |
+          if [[ -z "$SIGNING_P12" ]]; then
+            echo "::warning::MADMOLE_SIGNING_P12 is not set; signing ad hoc, so macOS drops permissions on every update"
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/madmole-signing.keychain-db"
+          security create-keychain -p "" "$keychain"
+          security set-keychain-settings "$keychain"
+          security unlock-keychain -p "" "$keychain"
+          printf '%s' "$SIGNING_P12" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -P madmole -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          /usr/bin/openssl pkcs12 -in "$RUNNER_TEMP/signing.p12" -clcerts -nokeys -passin pass:madmole -out "$RUNNER_TEMP/signing.pem"
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/signing.pem" || true
+          rm -f "$RUNNER_TEMP/signing.p12"
+          hash=$(security find-certificate -c "MadMole Code Signing" -Z "$keychain" | awk '/SHA-1/ {print $3}')
+          [[ -n "$hash" ]] || { echo "::error::No 'MadMole Code Signing' certificate in MADMOLE_SIGNING_P12"; exit 1; }
+          echo "identity=$hash" >> "$GITHUB_OUTPUT"
+
       - name: Build app, DMG and update zip
         env:
+          MADMOLE_SIGN_IDENTITY: ${{ steps.signing.outputs.identity || '-' }}
           MADMOLE_VERSION: 1.0.${{ github.run_number }}
           MADMOLE_BUILD: ${{ github.run_number }}
           MADMOLE_UPDATE_REPO: ${{ github.repository }}
@@ -84,6 +113,12 @@ jobs:
           # Without this key macOS refuses Finder automation from the app
           # silently, and uninstall cannot reach Finder's Trash fallback.
           /usr/libexec/PlistBuddy -c "Print :NSAppleEventsUsageDescription" "$APP/Contents/Info.plist"
+          requirement=$(codesign -d -r- "$APP" 2>&1 | grep '^designated' || true)
+          echo "$requirement"
+          if [[ -n "${{ steps.signing.outputs.identity }}" && "$requirement" != *"certificate"* ]]; then
+            echo "::error::A signing certificate was loaded but the app is not signed with it"
+            exit 1
+          fi
 
       - name: UI test, click every sidebar page
         run: |

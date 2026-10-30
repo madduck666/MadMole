@@ -14,6 +14,7 @@ enum Diagnostics {
         lines.append("Motor: \(Engine.version), Go araçları: \(Engine.hasGoBinaries ? "var" : "eksik")")
         lines.append("macOS: \(info.operatingSystemVersionString)")
         lines.append("Konum: \(Bundle.main.bundleURL.path)")
+        lines.append("İmza: \(SigningInfo.usesCertificate ? "sertifikalı (izinler güncellemelerde korunur)" : "ad hoc (izinler güncellemelerde düşebilir)")")
         lines.append("Açık sayfa: \(model.page.rawValue)")
         lines.append("Güncelleme durumu: \(String(describing: model.updates.phase))")
         lines.append("")

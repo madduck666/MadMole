@@ -198,6 +198,12 @@ struct UpdateSettingsCard: View {
                         .disabled(store.isBusy)
                 }
             }
+            Label(SigningInfo.usesCertificate
+                  ? "Sabit sertifikayla imzalı: izinler güncellemelerde korunur."
+                  : "Geçici (ad hoc) imzalı: macOS her güncellemede Tam Disk Erişimi'ni düşürebilir.",
+                  systemImage: SigningInfo.usesCertificate ? "checkmark.shield" : "exclamationmark.shield")
+                .font(.caption)
+                .foregroundStyle(SigningInfo.usesCertificate ? Theme.green : Theme.orange)
             Toggle("Açılışta yeni sürümü otomatik denetle", isOn: $autoCheck)
                 .toggleStyle(.checkbox)
                 .onChange(of: autoCheck) { _, value in store.autoCheck = value }

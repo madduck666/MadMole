@@ -10,6 +10,8 @@
 #
 # MADMOLE_VERSION, MADMOLE_BUILD and MADMOLE_UPDATE_REPO set the version, the
 # build number the in-app updater compares, and the GitHub repository it reads.
+# MADMOLE_SIGN_IDENTITY names a code-signing identity in the keychain (default:
+# ad hoc).
 #
 # Output: app/.build/MadMole.app (a hidden build folder, so repository checks
 # never lint the engine copy inside the bundle).
@@ -38,7 +40,7 @@ for arg in "$@"; do
         --zip) MAKE_ZIP=true ;;
         --debug) CONFIGURATION="debug" ;;
         -h | --help)
-            sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *)
@@ -129,11 +131,20 @@ else
     echo "Icon generation failed; the app will use the default icon."
 fi
 
-step "Signing (ad hoc)"
-codesign --force --sign - --timestamp=none "$ENGINE_DIR/bin/analyze-go" "$ENGINE_DIR/bin/status-go"
-codesign --force --sign - --timestamp=none "$CONTENTS/MacOS/$APP_NAME"
-codesign --force --sign - --timestamp=none "$BUNDLE_STAGE"
+# A stable certificate keeps the designated requirement, and so macOS
+# privacy permissions (Full Disk Access, App Management), the same across
+# updates; an ad-hoc signature changes with every build.
+SIGN_IDENTITY="${MADMOLE_SIGN_IDENTITY:--}"
+if [[ "$SIGN_IDENTITY" == "-" ]]; then
+    step "Signing (ad hoc)"
+else
+    step "Signing with \"$SIGN_IDENTITY\""
+fi
+codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$ENGINE_DIR/bin/analyze-go" "$ENGINE_DIR/bin/status-go"
+codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$CONTENTS/MacOS/$APP_NAME"
+codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$BUNDLE_STAGE"
 codesign --verify --strict "$BUNDLE_STAGE"
+codesign -d -r- "$BUNDLE_STAGE" 2>&1 | grep '^designated' || true
 
 mkdir -p "$OUT_DIR"
 if [[ -d "$APP_BUNDLE" ]]; then
