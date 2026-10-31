@@ -35,6 +35,13 @@ struct DashboardView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             hasFullDiskAccess = Permissions.hasFullDiskAccess
         }
+        // Live metrics cost a little CPU every two seconds; collect them only
+        // while a MadMole window is actually on screen (not minimized, hidden
+        // or fully covered).
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didChangeOcclusionStateNotification)) { _ in
+            let onScreen = NSApp.windows.contains { $0.isVisible && $0.occlusionState.contains(.visible) }
+            if onScreen { store.start() } else { store.stop() }
+        }
         .onDisappear { store.stop() }
     }
 

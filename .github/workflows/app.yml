@@ -177,6 +177,29 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+      - name: Measure memory and CPU use
+        run: |
+          APP_BIN="app/.build/MadMole.app/Contents/MacOS/MadMole"
+          measure() {
+            local label="$1" page="$2"
+            MADMOLE_START_PAGE="$page" "$APP_BIN" > /dev/null 2>&1 &
+            local pid=$!
+            sleep 20
+            local samples=0 rss_total=0 cpu_total=0
+            for _ in $(seq 1 10); do
+              read -r rss cpu < <(ps -A -o rss=,%cpu=,comm= | awk '/MadMole|status-go|analyze-go/ {r+=$1; c+=$2} END {printf "%d %.1f\n", r, c}')
+              rss_total=$((rss_total + rss)); cpu_total=$(python3 -c "print($cpu_total + $cpu)")
+              samples=$((samples + 1))
+              sleep 2
+            done
+            python3 -c "print(f'$label: {${rss_total}/${samples}/1024:.0f} MB RAM, {${cpu_total}/${samples}:.1f}% CPU (average of ${samples} samples, MadMole + helpers)')"
+            kill "$pid" 2> /dev/null || true
+            wait "$pid" 2> /dev/null || true
+            sleep 2
+          }
+          measure "Dashboard (live metrics)" dashboard
+          measure "Settings (idle)" settings
+
       - name: Self-update from the newest published release
         env:
           # The shared runner IP exhausts GitHub's anonymous API limit; the app
