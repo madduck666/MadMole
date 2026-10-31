@@ -44,8 +44,9 @@ gösterilir; ham çıktı alttaki **Konsol** panelinde (⌘J) görülebilir.
 1. [Sürümler sayfasından](https://github.com/madduck666/MadMole/releases) en
    yeni **MadMole 1.0.x** sürümünün `MadMole.dmg` dosyasını indirin.
 2. DMG'yi açın, **MadMole**'u **Applications** klasörüne sürükleyin.
-3. İlk açılışta Finder'da MadMole'a sağ tıklayıp **Aç** deyin (uygulama
-   ücretli Apple sertifikası yerine ad-hoc imzalı olduğu için bir kez gerekir).
+3. İlk açılışta Finder'da MadMole'a sağ tıklayıp **Aç** deyin. Uygulama
+   ücretli bir Apple sertifikasıyla değil, depoya eklenen kendi sertifikanızla
+   imzalanır; macOS bu yüzden ilk açılışta bir kez onay ister.
 
 Bundan sonra DMG'ye gerek yok. Depoya her değişiklik gönderildiğinde GitHub
 Actions (`.github/workflows/app.yml`) yeni bir sürüm yayınlar
