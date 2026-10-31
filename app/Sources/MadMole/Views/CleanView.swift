@@ -7,6 +7,7 @@ struct CleanView: View {
     @State private var expanded: Set<String> = []
     @State private var confirmClean = false
     @State private var confirmScanWithoutAccess = false
+    @State private var copiedPerf = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -19,6 +20,11 @@ struct CleanView: View {
                     }
                 }
                 Menu {
+                    Button("Ayrıntılı tarama (hız ölçümü)") {
+                        store.scan(verbose: true)
+                    }
+                    .disabled(store.isScanning)
+                    Divider()
                     Button("Korunan yolları düzenle…") {
                         model.runInTerminal(title: "Korunan Yollar", subtitle: "Temizlikte asla dokunulmayacak yolları seçin",
                                             arguments: ["clean", "--whitelist"], tint: Page.clean.tint)
@@ -108,6 +114,11 @@ struct CleanView: View {
                 summary(preview)
                     .padding(.horizontal, 24)
                     .padding(.bottom, 16)
+                if !store.perfReport.isEmpty {
+                    perfCard
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 16)
+                }
                 ScrollView {
                     LazyVStack(spacing: 10) {
                         ForEach(preview.sections) { section in
@@ -168,6 +179,38 @@ struct CleanView: View {
                     }
                     .buttonStyle(.borderless)
                     .font(.caption)
+                }
+            }
+        }
+    }
+
+    private var perfCard: some View {
+        Card(title: "Hız ölçümü: en yavaş adımlar", symbol: "stopwatch", tint: Theme.orange) {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(store.perfReport.prefix(8)) { entry in
+                    HStack {
+                        Text(entry.label)
+                            .font(.system(size: 12, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer()
+                        Text(String(format: "%.1f sn", entry.seconds))
+                            .font(.system(size: 12, weight: .semibold))
+                            .monospacedDigit()
+                    }
+                }
+            }
+            HStack {
+                Text(store.lastScanDuration.map { "Toplam \(Int($0)) sn" } ?? "")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(store.perfReportText, forType: .string)
+                    copiedPerf = true
+                } label: {
+                    Label(copiedPerf ? "Kopyalandı" : "Raporu Kopyala", systemImage: copiedPerf ? "checkmark" : "doc.on.doc")
                 }
             }
         }

@@ -22,6 +22,21 @@ final class CleanStore {
     /// When the engine last printed anything; drives the "no output for a
     /// while" hint on the scanning screen.
     private(set) var lastActivity: Date?
+
+    /// One `PERF [label] 1.234s` timing the engine writes in --debug runs.
+    struct PerfEntry: Identifiable {
+        let id = UUID()
+        let label: String
+        let seconds: Double
+    }
+
+    /// The slowest steps of the last verbose scan, slowest first.
+    private(set) var perfReport: [PerfEntry] = []
+    private(set) var lastScanDuration: TimeInterval?
+
+    static var debugLog: URL {
+        Engine.logDirectory.appendingPathComponent("mole_debug_session.log")
+    }
     private(set) var systemPreviewIncluded = false
     var console: ConsoleLog?
     private var task: Task<Void, Never>?
@@ -35,6 +50,8 @@ final class CleanStore {
         guard !isScanning else { return }
         let arguments = ["clean", "--dry-run"] + (verbose ? ["--debug"] : [])
         if verbose { console?.isVisible = true }
+        perfReport = []
+        let debugOffset = verbose ? Self.fileSize(Self.debugLog) : nil
         phase = .scanning
         lastLine = ""
         let started = Date()
@@ -50,6 +67,10 @@ final class CleanStore {
                     Task { @MainActor in self.noteLine(line) }
                 }
                 self.finish(result: result, startedAt: started)
+                self.lastScanDuration = Date().timeIntervalSince(started)
+                if let debugOffset {
+                    self.perfReport = Self.perfEntries(since: debugOffset)
+                }
             } catch is CancellationError {
                 self.phase = .idle
             } catch {
@@ -62,6 +83,42 @@ final class CleanStore {
         task?.cancel()
         task = nil
         phase = preview == nil ? .idle : .loaded
+    }
+
+    private static func fileSize(_ url: URL) -> UInt64 {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        return (attributes?[.size] as? NSNumber)?.uint64Value ?? 0
+    }
+
+    /// Reads the PERF timings appended to the debug log after `offset`.
+    static func perfEntries(since offset: UInt64) -> [PerfEntry] {
+        guard let handle = try? FileHandle(forReadingFrom: debugLog) else { return [] }
+        defer { try? handle.close() }
+        try? handle.seek(toOffset: offset)
+        let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
+        var entries: [PerfEntry] = []
+        for line in text.split(separator: "\n") {
+            guard let start = line.range(of: "PERF ["),
+                  let close = line.range(of: "] ", range: start.upperBound..<line.endIndex) else { continue }
+            let label = String(line[start.upperBound..<close.lowerBound])
+            let rest = line[close.upperBound...].trimmingCharacters(in: .whitespaces)
+            guard rest.hasSuffix("s"), let seconds = Double(rest.dropLast()) else { continue }
+            entries.append(PerfEntry(label: label, seconds: seconds))
+        }
+        return entries.sorted { $0.seconds > $1.seconds }
+    }
+
+    /// A short plain-text report of the slowest steps, to paste into a message.
+    var perfReportText: String {
+        var lines = ["MadMole ayrıntılı tarama"]
+        if let duration = lastScanDuration {
+            lines.append("Toplam süre: \(Int(duration)) sn")
+        }
+        lines.append("En yavaş adımlar:")
+        for (index, entry) in perfReport.prefix(20).enumerated() {
+            lines.append(String(format: "%2d. %@ — %.1f sn", index + 1, entry.label, entry.seconds))
+        }
+        return lines.joined(separator: "\n")
     }
 
     private func noteLine(_ line: String) {
