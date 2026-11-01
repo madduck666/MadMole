@@ -821,6 +821,15 @@ _mole_paths_have_open_handle() {
     return 1
 }
 
+# 0 once the section's shared container-cache handle probe budget is spent.
+# From then on _mole_container_cache_has_open_handle answers "could not tell"
+# for every existing path, so each later candidate is kept without a probe.
+_mole_container_cache_probe_budget_spent() {
+    local deadline="${_MOLE_CONTAINER_CACHE_PROBE_DEADLINE:-}"
+    [[ "$deadline" =~ ^[0-9]+$ ]] || return 1
+    [[ $((deadline - SECONDS)) -le 0 ]]
+}
+
 # Is any process holding the exact container-cache file, or a descendant of
 # the directory, open? 0 = in use, 1 = conclusively idle, 2 = could not tell;
 # signal statuses are preserved so clean can stop instead of treating an

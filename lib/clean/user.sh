@@ -1373,8 +1373,19 @@ process_container_cache() {
     _nullglob_state=$(shopt -p nullglob || true)
     _dotglob_state=$(shopt -p dotglob || true)
     shopt -s nullglob dotglob
+    # Every item of a reverse-DNS container reaches the shared handle probe.
+    # Once that budget is spent each one is kept as not conclusively idle, so
+    # walking the rest only repeats owner probes for a known answer: a
+    # 2,439-entry X notification cache spent 425s here. Other ids never reach
+    # the probe and keep going.
+    local handle_probed=false
+    [[ "$bundle_id" == *.* && "$bundle_id" != .* && "$bundle_id" != *"|"* ]] && handle_probed=true
     local item
     for item in "$cache_dir"/*; do
+        if [[ "$handle_probed" == "true" ]] && _mole_container_cache_probe_budget_spent; then
+            debug_log "Container cache handle probe budget spent, keep the rest: $cache_dir"
+            break
+        fi
         [[ -e "$item" ]] || continue
         [[ -L "$item" ]] && continue
         if holds_compiled_model_cache "$item"; then

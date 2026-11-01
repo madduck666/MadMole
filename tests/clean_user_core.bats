@@ -1905,6 +1905,47 @@ EOF
     [[ "$output" != *"RESET="* ]] || return 1
 }
 
+@test "process_container_cache stops walking once the handle probe budget is spent" {
+    local case_name
+    for case_name in spent-dotted spent-uuid open-dotted; do
+        run env HOME="$BATS_TEST_TMPDIR/probe-$case_name" PROJECT_ROOT="$PROJECT_ROOT" \
+            CASE="$case_name" DRY_RUN=true /bin/bash --noprofile --norc <<'EOF'
+set -euo pipefail
+source "$PROJECT_ROOT/lib/core/common.sh"
+source "$PROJECT_ROOT/lib/clean/user.sh"
+should_protect_data() { return 1; }
+should_protect_path() { return 1; }
+is_path_whitelisted() { return 1; }
+holds_compiled_model_cache() { return 1; }
+get_path_size_kb() { printf '1\n'; }
+validate_path_for_deletion() { echo "VALIDATE:${1##*/}"; return 1; }
+
+id=com.example.Busy
+[[ "$CASE" != spent-uuid ]] || id=36320656-3F24-41D2-B143-5B1DB5D27AD5
+container="$HOME/Library/Containers/$id"
+mkdir -p "$container/Data/Library/Caches"
+for name in a b c; do printf 'x\n' > "$container/Data/Library/Caches/$name"; done
+total_size=0
+total_size_partial=false
+cleaned_count=0
+found_any=false
+precise_size_limit=64
+precise_size_used=0
+_MOLE_CONTAINER_CACHE_PROBE_DEADLINE=$SECONDS
+[[ "$CASE" != open-dotted ]] || _MOLE_CONTAINER_CACHE_PROBE_DEADLINE=$((SECONDS + 600))
+process_container_cache "$container"
+echo "DONE"
+EOF
+        [ "$status" -eq 0 ] || { echo "$case_name: $output"; return 1; }
+        [[ "$output" == *DONE* ]] || { echo "$case_name: $output"; return 1; }
+        if [[ "$case_name" == spent-dotted ]]; then
+            [[ "$output" != *VALIDATE:* ]] || { echo "$case_name: $output"; return 1; }
+        else
+            [[ "$output" == *VALIDATE:a* && "$output" == *VALIDATE:c* ]] || { echo "$case_name: $output"; return 1; }
+        fi
+    done
+}
+
 @test "process_container_cache counts only items safe_remove actually removed (#1471)" {
     run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" DRY_RUN=false \
         /bin/bash --noprofile --norc <<'EOF'
