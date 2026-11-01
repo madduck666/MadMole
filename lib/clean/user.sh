@@ -1186,8 +1186,10 @@ clean_app_caches() {
     # running can crash Calendar.app until logout/login (#1508). Apple treats
     # this as a manual troubleshooting step, not routine cache maintenance.
     safe_clean ~/Library/Application\ Support/AddressBook/Sources/*/Photos.cache "Address Book photo cache" || true
-    local support_rc=0
+    local support_rc=0 _perf_app_cache_part=""
+    debug_timer_start _perf_app_cache_part
     clean_support_app_data || support_rc=$?
+    debug_timer_end "app caches: support app data" _perf_app_cache_part
     if mole_rc_signal "$support_rc"; then
         return "$support_rc"
     fi
@@ -1236,12 +1238,16 @@ clean_app_caches() {
     local _ng_state
     _ng_state=$(shopt -p nullglob || true)
     shopt -s nullglob
-    local container_rc=0
+    local container_rc=0 _perf_container=""
+    debug_timer_start _perf_app_cache_part
     for container_dir in "$containers_dir"/*; do
         [[ -d "$container_dir/Data/Library/Caches" ]] || continue
+        debug_timer_start _perf_container
         process_container_cache "$container_dir" || container_rc=$?
+        debug_timer_end "sandboxed app cache: ${container_dir##*/}" _perf_container
         [[ $container_rc -eq 0 ]] || break
     done
+    debug_timer_end "app caches: sandboxed containers" _perf_app_cache_part
     # eval: restore shopt state captured by $(shopt -p)
     eval "$_ng_state"
     stop_section_spinner
@@ -1271,7 +1277,9 @@ clean_app_caches() {
         note_activity
     fi
 
+    debug_timer_start _perf_app_cache_part
     clean_group_container_caches || return $?
+    debug_timer_end "app caches: group containers" _perf_app_cache_part
     clean_handoff_pasteboard_cache || return $?
 }
 
