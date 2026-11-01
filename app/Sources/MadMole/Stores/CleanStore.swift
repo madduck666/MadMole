@@ -51,7 +51,6 @@ final class CleanStore {
         let arguments = ["clean", "--dry-run"] + (verbose ? ["--debug"] : [])
         if verbose { console?.isVisible = true }
         perfReport = []
-        let debugOffset = verbose ? Self.fileSize(Self.debugLog) : nil
         phase = .scanning
         lastLine = ""
         let started = Date()
@@ -68,8 +67,8 @@ final class CleanStore {
                 }
                 self.finish(result: result, startedAt: started)
                 self.lastScanDuration = Date().timeIntervalSince(started)
-                if let debugOffset {
-                    self.perfReport = Self.perfEntries(since: debugOffset)
+                if verbose {
+                    self.perfReport = Self.perfEntries(sessionStartedAfter: started)
                 }
             } catch is CancellationError {
                 self.phase = .idle
@@ -85,17 +84,19 @@ final class CleanStore {
         phase = preview == nil ? .idle : .loaded
     }
 
-    private static func fileSize(_ url: URL) -> UInt64 {
-        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
-        return (attributes?[.size] as? NSNumber)?.uint64Value ?? 0
-    }
-
-    /// Reads the PERF timings appended to the debug log after `offset`.
-    static func perfEntries(since offset: UInt64) -> [PerfEntry] {
-        guard let handle = try? FileHandle(forReadingFrom: debugLog) else { return [] }
-        defer { try? handle.close() }
-        try? handle.seek(toOffset: offset)
-        let text = String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
+    /// Reads the PERF timings of the newest debug session in the engine log.
+    /// The engine empties the log when a --debug run starts, so an offset
+    /// taken before the scan points into the old, longer file and skips most
+    /// of the new timings; the session header marks where this run begins.
+    static func perfEntries(sessionStartedAfter started: Date) -> [PerfEntry] {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: debugLog.path)
+        guard let modified = attributes?[.modificationDate] as? Date,
+              modified >= started.addingTimeInterval(-2),
+              let data = try? Data(contentsOf: debugLog) else { return [] }
+        var text = String(decoding: data, as: UTF8.self)
+        if let header = text.range(of: "Mole Debug Session", options: .backwards) {
+            text = String(text[header.upperBound...])
+        }
         var entries: [PerfEntry] = []
         for line in text.split(separator: "\n") {
             guard let start = line.range(of: "PERF ["),
