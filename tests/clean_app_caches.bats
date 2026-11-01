@@ -3306,6 +3306,46 @@ EOF
     [[ "$output" != *BAD_PATTERN* ]]
 }
 
+@test "named app cache preview asks the owner probe once per batch" {
+    local mode
+    for mode in idle running unknown; do
+        run env HOME="$BATS_TEST_TMPDIR/named-preview-$mode" PROJECT_ROOT="$PROJECT_ROOT" MODE="$mode" \
+            MOLE_TEST_NO_AUTH=1 /bin/bash --noprofile --norc <<'EOF'
+set -euo pipefail
+cache="$HOME/Library/Application Support/Microsoft/Teams/Cache"
+mkdir -p "$cache"
+for i in 1 2 3 4 5 6; do touch "$cache/f_00000$i"; done
+source "$PROJECT_ROOT/bin/clean.sh"
+DRY_RUN=true
+note_activity() { :; }
+pgrep() {
+    echo probe >> "$HOME/probes"
+    case "$MODE" in
+        running) return 0 ;;
+        unknown) return 2 ;;
+        *) return 1 ;;
+    esac
+}
+get_cleanup_path_size_kb() { echo 1; }
+safe_remove() { echo "SINK:$1"; }
+record_dry_run_cleanup_target() { echo "PREVIEW:$1"; }
+mole_safe_clean_app_cache "Microsoft Teams" "$cache"/* "Microsoft Teams legacy cache"
+printf 'PROBES:%s\n' "$(wc -l < "$HOME/probes" | tr -d ' ')"
+EOF
+        [ "$status" -eq 0 ] || { echo "$mode: $output"; return 1; }
+        [[ "$output" != *SINK:* ]] || { echo "$mode: $output"; return 1; }
+        if [[ "$mode" == idle ]]; then
+            local previews
+            previews=$(grep -c '^PREVIEW:' <<< "$output" || true)
+            [ "$previews" -eq 6 ] || { echo "$output"; return 1; }
+            # One owner question is a -x and an -f pgrep; six files used to cost twelve.
+            [[ "$output" == *"PROBES:2"* ]] || { echo "$output"; return 1; }
+        else
+            [[ "$output" != *PREVIEW:* ]] || { echo "$mode: $output"; return 1; }
+        fi
+    done
+}
+
 @test "CodeBuddy extension caches preserve each shared owner and late starts" {
     local owner phase
     for owner in CodeBuddy 'CodeBuddy CN' WorkBuddy Unrelated; do

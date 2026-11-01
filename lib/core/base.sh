@@ -1846,10 +1846,18 @@ _dev_process_delete_guard_allows() {
         leaf_parent_id="$_MOLE_PATH_SNAPSHOT_PARENT_ID"
         leaf_target_id="$_MOLE_PATH_SNAPSHOT_TARGET_ID"
     fi
-    mole_clean_process_guard \
-        "$_MOLE_DEV_PROCESS_GUARD_PROBE" \
-        "$_MOLE_DEV_PROCESS_GUARD_FAMILY started" \
-        "${_MOLE_DEV_PROCESS_GUARD_UNKNOWN_REASON:-process state unknown}" || return $?
+    # A preview removes nothing, so one idle answer covers the rest of a
+    # path-independent batch (see mole_safe_clean_app_cache). Real runs never
+    # reuse it: every removal and the final sink probe again.
+    if [[ "${DRY_RUN:-false}" != "true" || "${_MOLE_DEV_PROCESS_GUARD_PREVIEW_IDLE:-}" != "true" ]]; then
+        mole_clean_process_guard \
+            "$_MOLE_DEV_PROCESS_GUARD_PROBE" \
+            "$_MOLE_DEV_PROCESS_GUARD_FAMILY started" \
+            "${_MOLE_DEV_PROCESS_GUARD_UNKNOWN_REASON:-process state unknown}" || return $?
+        if [[ "${DRY_RUN:-false}" == "true" && "${_MOLE_DEV_PROCESS_GUARD_PREVIEW_IDLE:-}" == "pending" ]]; then
+            _MOLE_DEV_PROCESS_GUARD_PREVIEW_IDLE=true
+        fi
+    fi
 
     if [[ -n "$leaf_parent" &&
         "${_MOLE_SAFE_CLEAN_BOUND_PATH:-}" != "$_MOLE_DEV_GUARDED_PATH" ]]; then
@@ -1919,6 +1927,11 @@ mole_safe_clean_app_cache() {
     shift
     local _MOLE_NAMED_APP_CACHE_PATTERN
     _MOLE_NAMED_APP_CACHE_PATTERN=$(_mole_regex_escape "$owner")
+    # The owner probe does not read the path, so a preview asks it once per
+    # batch instead of once per file: a legacy Teams cache holds thousands of
+    # entries and two pgreps each made its preview take over five minutes.
+    local _MOLE_DEV_PROCESS_GUARD_PREVIEW_IDLE=""
+    [[ "${DRY_RUN:-false}" != "true" ]] || _MOLE_DEV_PROCESS_GUARD_PREVIEW_IDLE=pending
     local rc=0
     _dev_safe_clean_process_guarded _mole_named_app_cache_running "$owner" "${*: -1}" "$@" || rc=$?
     [[ $rc -gt 1 ]] || return 0
