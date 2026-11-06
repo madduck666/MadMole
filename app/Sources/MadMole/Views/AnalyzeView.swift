@@ -3,6 +3,7 @@ import Charts
 import SwiftUI
 
 struct AnalyzeView: View {
+    @Environment(AppModel.self) private var model
     @Bindable var store: AnalyzeStore
     @State private var tab: Tab = .folders
     @State private var confirmTrash = false
@@ -364,6 +365,13 @@ struct AnalyzeView: View {
             Button("Seçimi Temizle") { store.selection.removeAll() }
                 .buttonStyle(.borderless)
             Button {
+                if let only = selected.first { model.startMove(path: only.path) }
+            } label: {
+                Label("Harici Diske Taşı", systemImage: "externaldrive")
+            }
+            .disabled(selected.count != 1 || store.isTrashing)
+            .help("Tek bir öğe seçin: kopyalanır, doğrulanır, sonra aslı Çöp'e taşınır")
+            Button {
                 requestTrash(selected)
             } label: {
                 if store.isTrashing {
@@ -401,6 +409,7 @@ struct AnalyzeView: View {
 }
 
 private struct EntryRow: View {
+    @Environment(AppModel.self) private var model
     let entry: AnalyzeEntry
     let fraction: Double
     let share: Double
@@ -474,6 +483,7 @@ private struct EntryRow: View {
                 NSPasteboard.general.setString(entry.path, forType: .string)
             }
             Divider()
+            Button("Harici Diske Taşı…") { model.startMove(path: entry.path) }
             Button("Çöpe Taşı…", role: .destructive) { requestTrash([entry]) }
         }
         .help(entry.path)

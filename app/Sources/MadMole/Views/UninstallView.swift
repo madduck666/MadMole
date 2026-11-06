@@ -14,7 +14,7 @@ struct UninstallView: View {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text("\(store.apps.count) uygulama")
                             .font(.callout.weight(.semibold))
-                        Text("Toplam \(TextUtils.formatBytes(store.totalBytes))")
+                        Text("Program \(TextUtils.formatBytes(store.totalBytes)) + veri \(TextUtils.formatBytes(store.totalDataBytes))\(store.isSizingData ? "…" : "")")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -107,15 +107,16 @@ struct UninstallView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 140)
+            .frame(width: 200)
 
             Toggle("Sadece Homebrew", isOn: $store.onlyHomebrew)
                 .toggleStyle(.checkbox)
 
             Spacer()
 
-            if store.isLoading && !store.apps.isEmpty {
+            if (store.isLoading || store.isSizingData) && !store.apps.isEmpty {
                 ProgressView().controlSize(.small)
+                    .help(store.isSizingData ? "Uygulama verileri ölçülüyor" : "Liste yenileniyor")
             }
             Button {
                 store.load()
@@ -131,8 +132,23 @@ struct UninstallView: View {
         let maxSize = max(apps.map(\.sizeBytes).max() ?? 1, 1)
         return ScrollView {
             LazyVStack(spacing: 6) {
+                if !apps.isEmpty {
+                    HStack(spacing: 12) {
+                        Spacer()
+                        Text("Program")
+                            .frame(width: 80, alignment: .trailing)
+                        Text("Veri")
+                            .frame(width: 80, alignment: .trailing)
+                            .help("Kaldırırken motorun bu uygulamaya ait bulduğu dosyalar: Application Support, Containers, Caches, Preferences ve benzerleri")
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                }
                 ForEach(apps) { app in
                     AppRow(app: app,
+                           dataBytes: store.dataBytes[app.id],
+                           isMeasuringData: store.isSizingData,
                            isSelected: store.selection.contains(app.id),
                            fraction: Double(app.sizeBytes) / Double(maxSize)) {
                         store.toggle(app)
@@ -160,7 +176,7 @@ struct UninstallView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("\(store.selection.count) uygulama seçildi")
                     .font(.callout.weight(.semibold))
-                Text("Uygulama boyutu: \(TextUtils.formatBytes(store.selectedBytes)) (artıklar terminalde hesaplanır)")
+                Text("Program \(TextUtils.formatBytes(store.selectedBytes)) + veri \(TextUtils.formatBytes(store.selectedDataBytes)) (kesin liste terminalde gösterilir)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -218,6 +234,8 @@ struct UninstallView: View {
 
 private struct AppRow: View {
     let app: InstalledApp
+    let dataBytes: Int64?
+    let isMeasuringData: Bool
     let isSelected: Bool
     let fraction: Double
     let toggle: () -> Void
@@ -250,6 +268,19 @@ private struct AppRow: View {
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .frame(width: 80, alignment: .trailing)
+            Group {
+                if let dataBytes {
+                    Text(dataBytes > 0 ? TextUtils.formatBytes(dataBytes) : "—")
+                } else if isMeasuringData {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Text("?")
+                }
+            }
+            .font(.system(size: 13, weight: .semibold, design: .rounded))
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .frame(width: 80, alignment: .trailing)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

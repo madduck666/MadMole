@@ -9,6 +9,8 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
     case clean
     case uninstall
     case analyze
+    case move
+    case leftovers
     case optimize
     case purge
     case installer
@@ -24,6 +26,8 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .clean: return "Akıllı Temizlik"
         case .uninstall: return "Uygulama Kaldırıcı"
         case .analyze: return "Disk Analizi"
+        case .move: return "Harici Diske Taşı"
+        case .leftovers: return "Sahipsiz Artıklar"
         case .optimize: return "Optimizasyon"
         case .purge: return "Proje Artıkları"
         case .installer: return "Kurulum Dosyaları"
@@ -39,6 +43,8 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .clean: return "Önbellek, log ve geçici dosyaları güvenle temizleyin"
         case .uninstall: return "Uygulamaları artıklarıyla birlikte kaldırın"
         case .analyze: return "Diskinizde yer kaplayanları keşfedin"
+        case .move: return "Kopyala, baytı baytına doğrula, sonra aslını Çöp'e taşı"
+        case .leftovers: return "Kaldırılmış uygulamalardan ve yarım güncellemelerden kalanlar"
         case .optimize: return "Sistem önbelleklerini ve servislerini tazeleyin"
         case .purge: return "node_modules, target, build gibi derleme artıklarını silin"
         case .installer: return ".dmg, .pkg, .iso, .xip ve .zip kurulum dosyalarını bulun"
@@ -54,6 +60,8 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .clean: return "sparkles"
         case .uninstall: return "trash.square.fill"
         case .analyze: return "chart.pie.fill"
+        case .move: return "externaldrive.fill.badge.checkmark"
+        case .leftovers: return "puzzlepiece.extension.fill"
         case .optimize: return "bolt.heart.fill"
         case .purge: return "hammer.fill"
         case .installer: return "shippingbox.fill"
@@ -69,6 +77,8 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
         case .clean: return Theme.teal
         case .uninstall: return Theme.pink
         case .analyze: return Theme.orange
+        case .move: return Theme.blue
+        case .leftovers: return Theme.purple
         case .optimize: return Theme.green
         case .purge: return Theme.purple
         case .installer: return Theme.blue
@@ -86,8 +96,8 @@ enum Page: String, CaseIterable, Identifiable, Hashable {
     static let groups: [(String, [Page])] = [
         ("Genel", [.dashboard]),
         ("Temizlik", [.clean, .purge, .installer]),
-        ("Uygulamalar", [.uninstall, .slim]),
-        ("Disk ve Sistem", [.analyze, .optimize]),
+        ("Uygulamalar", [.uninstall, .leftovers, .slim]),
+        ("Disk ve Sistem", [.analyze, .move, .optimize]),
         ("Kayıtlar", [.history]),
     ]
 }
@@ -183,6 +193,8 @@ final class AppModel {
     let clean = CleanStore()
     let uninstall = UninstallStore()
     let analyze = AnalyzeStore()
+    let move = MoveStore()
+    let leftovers = LeftoversStore()
     let history = HistoryStore()
     let updates = UpdateStore()
     let tools: [Page: ToolStore]
@@ -198,6 +210,8 @@ final class AppModel {
         clean.console = console
         uninstall.console = console
         analyze.console = console
+        move.console = console
+        leftovers.console = console
         for store in tools.values {
             store.console = console
         }
@@ -206,7 +220,8 @@ final class AppModel {
 
     /// `MADMOLE_START_PAGE=<page>` opens a page at launch and
     /// `MADMOLE_AUTORUN=1` starts its read-only scan; CI uses both to take
-    /// screenshots of every page.
+    /// screenshots of every page. `MADMOLE_MOVE_SOURCE=<path>` preselects
+    /// what the move page moves (nothing starts until the user confirms).
     private func applyLaunchOptions(_ environment: [String: String]) {
         if environment["MADMOLE_UPDATE_SELFTEST"] == "1" {
             updates.runSelfTest()
@@ -216,6 +231,9 @@ final class AppModel {
         }
         guard let raw = environment["MADMOLE_START_PAGE"], let start = Page(rawValue: raw) else { return }
         page = start
+        if start == .move, let source = environment["MADMOLE_MOVE_SOURCE"], source.hasPrefix("/") {
+            move.choose(source: URL(fileURLWithPath: source))
+        }
         if environment["MADMOLE_CONSOLE"] == "1" { console.isVisible = true }
         guard environment["MADMOLE_AUTORUN"] == "1" else { return }
         switch start {
@@ -224,6 +242,12 @@ final class AppModel {
         case .optimize, .purge, .installer, .slim: tools[start]?.preview()
         default: break
         }
+    }
+
+    /// Opens "Move to an external disk" with `path` already chosen.
+    func startMove(path: String) {
+        move.choose(source: URL(fileURLWithPath: path))
+        page = .move
     }
 
     func runInTerminal(

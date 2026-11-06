@@ -8,6 +8,7 @@ import Observation
 final class UninstallStore {
     enum SortOrder: String, CaseIterable, Identifiable {
         case size = "Boyut"
+        case data = "Veri"
         case name = "İsim"
         var id: String { rawValue }
     }
@@ -34,6 +35,7 @@ final class UninstallStore {
         }
         switch sortOrder {
         case .size: list.sort { $0.sizeBytes > $1.sizeBytes }
+        case .data: list.sort { (dataBytes[$0.id] ?? -1) > (dataBytes[$1.id] ?? -1) }
         case .name: list.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         }
         return list
@@ -51,6 +53,65 @@ final class UninstallStore {
         apps.reduce(0) { $0 + $1.sizeBytes }
     }
 
+    // MARK: App data sizes
+
+    /// Bytes of the user files the uninstall inventory (`find_app_files`)
+    /// attributes to each app, keyed by app id; missing while measuring.
+    private(set) var dataBytes: [String: Int64] = [:]
+    private(set) var dataPaths: [String: [String]] = [:]
+    private(set) var isSizingData = false
+    var helper = EngineHelper()
+    private var sizingTask: Task<Void, Never>?
+    private var sizingGeneration = 0
+
+    var selectedDataBytes: Int64 {
+        selectedApps.reduce(0) { $0 + (dataBytes[$1.id] ?? 0) }
+    }
+
+    var totalDataBytes: Int64 {
+        apps.reduce(0) { $0 + (dataBytes[$1.id] ?? 0) }
+    }
+
+    /// Measures app data in the background, four engine processes at a time;
+    /// the column fills in as each app finishes.
+    func sizeData() {
+        sizingTask?.cancel()
+        let pending = apps.filter { dataBytes[$0.id] == nil }
+        guard !pending.isEmpty else { return }
+        isSizingData = true
+        sizingGeneration += 1
+        let generation = sizingGeneration
+        let helper = helper
+        let workers = 4
+        let chunks = (0..<workers).map { worker in
+            stride(from: worker, to: pending.count, by: workers).map { pending[$0] }
+        }.filter { !$0.isEmpty }
+        sizingTask = Task {
+            await withTaskGroup(of: Void.self) { group in
+                for chunk in chunks {
+                    let queries = chunk.map { EngineHelper.AppQuery(bundleId: $0.bundleId, name: $0.name, path: $0.path) }
+                    let ids = chunk.map(\.id)
+                    group.addTask {
+                        try? await helper.appFiles(queries) { index, files in
+                            guard ids.indices.contains(index) else { return }
+                            let id = ids[index]
+                            let roots = DiskUsage.outermost(files)
+                            Task.detached(priority: .utility) {
+                                let bytes = roots.reduce(Int64(0)) { $0 + DiskUsage.allocatedSize(of: $1) }
+                                await MainActor.run {
+                                    guard self.sizingGeneration == generation else { return }
+                                    self.dataBytes[id] = bytes
+                                    self.dataPaths[id] = roots
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if !Task.isCancelled { self.isSizingData = false }
+        }
+    }
+
     func loadIfNeeded() {
         if apps.isEmpty && !isLoading { load() }
     }
@@ -59,6 +120,11 @@ final class UninstallStore {
         guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
+        sizingTask?.cancel()
+        sizingGeneration += 1
+        isSizingData = false
+        dataBytes = [:]
+        dataPaths = [:]
         console?.append("mo uninstall --list", source: "uninstall")
         task = Task {
             do {
@@ -71,6 +137,7 @@ final class UninstallStore {
                 self.selection = self.selection.filter { id in decoded.contains { $0.id == id } }
                 self.loadedAt = Date()
                 self.console?.append("\(decoded.count) uygulama bulundu", source: "uninstall")
+                self.sizeData()
             } catch is DecodingError {
                 self.errorMessage = CommandError.decoding("uygulama listesi").localizedDescription
             } catch {

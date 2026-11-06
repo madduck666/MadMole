@@ -63,6 +63,10 @@ struct ContentView: View {
             UninstallView(store: model.uninstall)
         case .analyze:
             AnalyzeView(store: model.analyze)
+        case .move:
+            MoveView(store: model.move)
+        case .leftovers:
+            LeftoversView(store: model.leftovers)
         case .optimize, .purge, .installer, .slim:
             if let store = model.tools[model.page] {
                 ToolPageView(store: store)
