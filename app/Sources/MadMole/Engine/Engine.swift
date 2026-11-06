@@ -17,6 +17,15 @@ enum Engine {
     static var statusBinary: String { rootURL.appendingPathComponent("bin/status-go").path }
     static var analyzeBinary: String { rootURL.appendingPathComponent("bin/analyze-go").path }
 
+    /// `madmole-helper.sh`, which asks the engine's own protection rules and
+    /// deletion funnel on the app's behalf. The bundle keeps it next to the
+    /// router; a source checkout keeps it in `app/Resources`.
+    static var helperScript: String {
+        let bundled = rootURL.appendingPathComponent("madmole-helper.sh").path
+        if FileManager.default.fileExists(atPath: bundled) { return bundled }
+        return rootURL.appendingPathComponent("app/Resources/madmole-helper.sh").path
+    }
+
     static var isAvailable: Bool {
         FileManager.default.isExecutableFile(atPath: mole)
     }

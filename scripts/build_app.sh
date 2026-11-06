@@ -103,6 +103,8 @@ cp "$ROOT_DIR/mole" "$ENGINE_DIR/mole"
 cp "$ROOT_DIR"/bin/*.sh "$ENGINE_DIR/bin/"
 cp -R "$ROOT_DIR/lib" "$ENGINE_DIR/lib"
 cp "$STAGE_DIR/go/analyze-go" "$STAGE_DIR/go/status-go" "$ENGINE_DIR/bin/"
+# The app's bridge to the engine's protection rules and Trash funnel.
+cp "$APP_DIR/Resources/madmole-helper.sh" "$ENGINE_DIR/madmole-helper.sh"
 cp "$ROOT_DIR/LICENSE" "$ENGINE_DIR/LICENSE"
 chmod 755 "$ENGINE_DIR/mole" "$ENGINE_DIR"/bin/*.sh "$ENGINE_DIR/bin/analyze-go" "$ENGINE_DIR/bin/status-go"
 find "$ENGINE_DIR" -name '.DS_Store' -type f -delete # SAFE: Finder metadata inside the private staging copy

@@ -91,6 +91,7 @@ enum CommandRunner {
     static func run(
         _ executable: String,
         _ arguments: [String],
+        environment: [String: String]? = nil,
         onLine: (@Sendable (String) -> Void)? = nil
     ) async throws -> CommandResult {
         guard FileManager.default.isExecutableFile(atPath: executable) else {
@@ -100,7 +101,7 @@ enum CommandRunner {
         let process = box.process
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
-        process.environment = Engine.environment(terminal: false)
+        process.environment = environment ?? Engine.environment(terminal: false)
         process.currentDirectoryURL = URL(fileURLWithPath: Engine.homeDirectory, isDirectory: true)
         let outPipe = Pipe()
         let errPipe = Pipe()
