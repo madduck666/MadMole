@@ -24,14 +24,25 @@ sekmesinden **App** iş akışını `publish_screenshots` seçeneğiyle elle
 | --- | --- | --- |
 | Genel Bakış | Sağlık puanı, CPU, bellek, disk, ağ, pil, ısı ve en çok kaynak kullanan süreçler, canlı | `status-go --watch` |
 | Akıllı Temizlik | Önce hiçbir şey silmeden tarar, kategorilere göre açılabilecek alanı gösterir, sonra temizler | `mo clean --dry-run`, `mo clean` |
-| Uygulama Kaldırıcı | Yüklü uygulamaları ikon ve boyutlarıyla listeler; seçtiklerinizi artıklarıyla kaldırır | `mo uninstall --list`, `mo uninstall …` |
+| Uygulama Kaldırıcı | Yüklü uygulamaları ikonlarıyla listeler; her uygulamanın program boyutunu ve kaydettiği verinin boyutunu ayrı sütunlarda gösterir; seçtiklerinizi artıklarıyla kaldırır | `mo uninstall --list`, `find_app_files`, `mo uninstall …` |
+| Sahipsiz Artıklar | Uygulaması artık yüklü olmayan veri klasörlerini, programı kalmamış açılış kayıtlarını, yarım kalmış kurulumları ve Sparkle güncelleme artıklarını önerir; yalnızca seçtiklerinizi Çöp'e taşır | `scan_installed_apps`, `is_bundle_orphaned`, `mole_delete` |
 | Disk Analizi | Klasörleri boyuta göre sıralar, halka grafikle gösterir, içine girer, Finder'da gösterir, Çöp'e taşır | `analyze-go --json`, `analyze-go --trash` |
+| Harici Diske Taşı | Bir klasörü ya da dosyayı harici diske `ditto` ile kopyalar, her dosyayı baytı baytına karşılaştırır, ancak hepsi aynıysa aslını Çöp'e taşır; hedefte aynı ad varsa durur, şifresiz diskte uyarır | `ditto`, `mole_delete` |
 | Optimizasyon | Sistem önbelleklerini ve servislerini tazeler | `mo optimize` |
 | Proje Artıkları | Eski `node_modules`, `target`, `build` klasörleri | `mo purge` |
 | Kurulum Dosyaları | `.dmg`, `.pkg`, `.iso`, `.xip`, `.zip` | `mo installer` |
 | Uygulama İnceltme | Evrensel uygulamalardan Intel kodunu çıkarır | `mo slim` |
 | Geçmiş | Yapılan her işlem ve silinen her öğe | `mo history --json` |
 | Ayarlar | Görünüm (Sistem/Açık/Koyu), Tam Disk Erişimi, korunan yollar, Touch ID | `mo clean --whitelist`, `mo touchid` |
+
+Harici Diske Taşı, Sahipsiz Artıklar ve veri sütunu, motorun kurallarına
+`madmole-helper.sh` üzerinden sorar (paketin içinde motorun yanında durur):
+korunan yollar (`~/.config/mole/whitelist`) ve içinde korunan yol olan klasörler
+reddedilir, `validate_path_for_deletion` uygulanır, Çöp'e taşıma `mole_delete`
+hunisinden geçer ve **Geçmiş**'e `madmole-move` / `madmole-leftovers` adıyla
+yazılır. Hiçbir şey kalıcı olarak silinmez. Yüklü uygulamaların listesi eksiksiz
+çıkarılamazsa (örneğin içinde uygulama bilgisi olmayan bozuk bir `.app`)
+Sahipsiz Artıklar `mo clean` gibi hiçbir klasöre "sahipsiz" demeden durur.
 
 Gerçek değişiklik yapan her işlem (temizlik, kaldırma, optimizasyon…) uygulama
 içinde açılan bir **terminal penceresinde** çalışır. Böylece motorun kendi onay
@@ -116,6 +127,14 @@ make build
 
 ```bash
 MADMOLE_ENGINE_DIR="$PWD" swift run --package-path app
+```
+
+Mantık testleri (taşıma ve karşılaştırma, korunan yollar, Çöp hunisi, veri
+listesi, artık kuralları) yalnızca Command Line Tools ile çalışır; Çöp'e taşıma
+denemeleri sahte bir ana klasörde ve motorun test Çöp'ünde yapılır:
+
+```bash
+app/Tests/run_logic_tests.sh
 ```
 
 Klasörler: `Engine/` motoru bulur ve çalıştırır, `Stores/` ekran durumlarını

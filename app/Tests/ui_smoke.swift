@@ -15,8 +15,8 @@ setvbuf(stdout, nil, _IONBF, 0)
 
 let pages = [
     "Akıllı Temizlik", "Proje Artıkları", "Kurulum Dosyaları",
-    "Uygulama Kaldırıcı", "Uygulama İnceltme", "Disk Analizi",
-    "Optimizasyon", "Geçmiş", "Genel Bakış",
+    "Uygulama Kaldırıcı", "Sahipsiz Artıklar", "Uygulama İnceltme", "Disk Analizi",
+    "Harici Diske Taşı", "Optimizasyon", "Geçmiş", "Genel Bakış",
 ]
 
 func attribute(_ element: AXUIElement, _ name: String) -> AnyObject? {

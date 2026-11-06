@@ -61,6 +61,9 @@ jobs:
       - name: Analyze trash mode tests
         run: go test ./cmd/analyze -run 'TrashMode|ParseArgs'
 
+      - name: App logic tests (external-disk move, app data, leftovers)
+        run: app/Tests/run_logic_tests.sh
+
       - name: Load the signing certificate
         id: signing
         env:
@@ -109,6 +112,8 @@ jobs:
           python3 -c "import json; d=json.load(open('/tmp/analyze.json')); print('entries', len(d['entries']))"
           "$ENGINE/mole" history --json --limit 5 > /tmp/history.json
           python3 -c "import json; json.load(open('/tmp/history.json')); print('history ok')"
+          # The bundled helper answers from the bundled engine (read-only check).
+          /bin/bash "$ENGINE/madmole-helper.sh" "$ENGINE" check /System | grep -q $'^refused\tprotected\t/System$'
           codesign --verify --strict --verbose=2 "$APP"
           # Without this key macOS refuses Finder automation from the app
           # silently, and uninstall cannot reach Finder's Trash fallback.
